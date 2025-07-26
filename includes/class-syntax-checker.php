@@ -47,7 +47,7 @@ class Simply_Syntax_Checker {
      * @param string $php_code The PHP code to validate
      * @return array ['valid' => bool, 'message' => string]
      */
-    public static function validate_hook($php_code) {
+    public static function validate_php($php_code) {
         // Check if PHP code is empty or only whitespace
         if (empty(trim($php_code))) {
             return [
