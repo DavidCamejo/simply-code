@@ -7,11 +7,15 @@ class Simply_Snippet_Manager {
      * Obtiene el orden actual de los snippets
      */
     private static function get_order() {
-        if (self::$order_cache === null) {
-            $order_file = SC_PATH . 'includes/snippets-order.php';
-            self::$order_cache = file_exists($order_file) ? include $order_file : [];
+        $order_file = SC_PATH . 'includes/snippets-order.php';
+        if (!file_exists($order_file)) return [];
+        // Forzar recarga real del archivo, evitando caché de include
+        $content = file_get_contents($order_file);
+        $order = [];
+        if (preg_match('/return\s+(.+);/s', $content, $matches)) {
+            $order = eval('return ' . $matches[1] . ';');
         }
-        return self::$order_cache;
+        return $order;
     }
 
     /**
@@ -133,8 +137,9 @@ class Simply_Snippet_Manager {
     /**
      * Lista todos los snippets
      */
-    public static function list_snippets($apply_order = true) {
-        if (self::$snippets_cache !== null && $apply_order) {
+    public static function list_snippets($apply_order = true, $force_reload = false) {
+        // Si no se fuerza la recarga y hay caché, devolverlo
+        if (self::$snippets_cache !== null && !$force_reload) {
             return self::$snippets_cache;
         }
 
@@ -164,26 +169,23 @@ class Simply_Snippet_Manager {
             }
         }
 
-        // Aplicar orden si es necesario
+        // Aplicar orden si se solicita
         if ($apply_order && !empty($order)) {
-            // Primero los snippets ordenados
+            $ordered_snippets = [];
             foreach ($order as $name) {
                 if (isset($available_snippets[$name])) {
-                    $snippets[] = $available_snippets[$name];
+                    $ordered_snippets[] = $available_snippets[$name];
                     unset($available_snippets[$name]);
                 }
             }
+            // Agregar snippets no ordenados al final
+            $snippets = array_merge($ordered_snippets, array_values($available_snippets));
+        } else {
+            $snippets = array_values($available_snippets);
         }
 
-        // Agregar snippets restantes
-        foreach ($available_snippets as $snippet) {
-            $snippets[] = $snippet;
-        }
-
-        if ($apply_order) {
-            self::$snippets_cache = $snippets;
-        }
-
+        // Guardar en caché
+        self::$snippets_cache = $snippets;
         return $snippets;
     }
 
@@ -192,15 +194,19 @@ class Simply_Snippet_Manager {
      */
     public static function update_snippets_order($names) {
         $order_file = SC_PATH . 'includes/snippets-order.php';
-        
+
         if (!is_dir(dirname($order_file))) {
             mkdir(dirname($order_file), 0755, true);
         }
 
         $content = "<?php\nreturn " . var_export($names, true) . ";\n";
         $result = file_put_contents($order_file, $content, LOCK_EX);
-        
+
         if ($result !== false) {
+            // Invalida opcache si está habilitado
+            if (function_exists('opcache_invalidate')) {
+                opcache_invalidate($order_file, true);
+            }
             self::invalidate_cache();
             return true;
         }
