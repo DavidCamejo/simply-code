@@ -1,8 +1,5 @@
 <?php
 // @description Dynamic pricing for PMPro
-
-if (!defined('ABSPATH')) exit;
-
 // Función para registrar todos los hooks necesarios
 function register_pmpro_dynamic_pricing_hooks() {
     // Registrar el hook para los campos dinámicos
