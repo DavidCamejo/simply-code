@@ -1,5 +1,5 @@
 <?php
 return array (
-  0 => 'theme-scripts',
-  1 => 'pmpro-dynamic-pricing',
+  0 => 'pmpro-dynamic-pricing',
+  1 => 'theme-scripts',
 );
