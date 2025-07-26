@@ -68,36 +68,31 @@
     <?php
     // Safe mode toggle
     $safe_mode = get_option(Simply_Code_Admin::OPTION_SAFE_MODE, 'on');
-    if (isset($_POST['safe_mode_toggle'])) {
-        update_option(Simply_Code_Admin::OPTION_SAFE_MODE, 
-            $_POST['safe_mode'] === 'on' ? 'on' : 'off'
-        );
-        echo '<div class="notice notice-success"><p>Configuración de modo seguro actualizada.</p></div>';
-    }
     ?>
     
-    <div class="card" style="max-width: 100%;">
-        <form method="post">
-            <label>
-                <input type="checkbox" name="safe_mode" value="on" <?php checked($safe_mode, 'on') ?>>
-                <strong>Modo seguro</strong> (validar sintaxis PHP antes de guardar y ejecutar snippets)
-            </label>
-            <p class="description">El modo seguro evita que se guarden o ejecuten snippets con errores de sintaxis, lo que podría romper su sitio.</p>
-            <p><input type="submit" name="safe_mode_toggle" class="button button-secondary" value="Guardar configuración"></p>
-        </form>
+    <div class="tablenav top">
+        <div class="alignleft actions">
+            <form method="post" style="display:inline;">
+                <?php wp_nonce_field('simply_code_actions'); ?>
+                <label>
+                    <input type="checkbox" name="safe_mode" <?php echo $safe_mode === 'on' ? 'checked' : ''; ?> onChange="this.form.submit()">
+                    Modo Seguro
+                </label>
+                <input type="hidden" name="safe_mode_toggle" value="1">
+            </form>
+        </div>
+        <div class="alignright">
+            <a href="<?php echo admin_url('admin.php?page=simply-code-new'); ?>" class="button button-primary">Nuevo Snippet</a>
+        </div>
+        <br class="clear">
     </div>
     
-    <div style="margin: 20px 0;">
-        <a href="?page=simply-code-new" class="page-title-action">Nuevo Snippet</a>
-    </div>
-
-    <table class="widefat">
+    <table class="wp-list-table widefat fixed striped">
         <thead>
             <tr>
                 <th>Nombre</th>
                 <th>Descripción</th>
                 <th>Estado</th>
-                <th>Orden</th>
                 <th>Acciones</th>
             </tr>
         </thead>
@@ -108,6 +103,7 @@
                 <td><?= esc_html($snippet['description']) ?></td>
                 <td>
                     <form method="post" style="display:inline;">
+                        <?php wp_nonce_field('simply_code_actions'); ?>
                         <input type="hidden" name="snippet_name" value="<?= esc_attr($snippet['name']) ?>">
                         <label class="switch">
                             <input type="checkbox" name="snippet_active" <?= isset($snippet['active']) && $snippet['active'] ? 'checked' : '' ?> onChange="this.form.submit()">
@@ -119,21 +115,27 @@
                 <td>
                     <?php if ($i > 0): ?>
                         <form method="post" style="display:inline;">
-                            <button name="move_up" value="<?= $i ?>" class="button" title="Subir">↑</button>
+                            <?php wp_nonce_field('simply_code_actions'); ?>
+                            <input type="hidden" name="move_up" value="<?= $i ?>">
+                            <button type="submit" class="button" title="Subir">↑</button>
                         </form>
                     <?php endif; ?>
                     <?php if ($i < count($snippets) - 1): ?>
                         <form method="post" style="display:inline;">
-                            <button name="move_down" value="<?= $i ?>" class="button" title="Bajar">↓</button>
+                            <?php wp_nonce_field('simply_code_actions'); ?>
+                            <input type="hidden" name="move_down" value="<?= $i ?>">
+                            <button type="submit" class="button" title="Bajar">↓</button>
                         </form>
                     <?php endif; ?>
-                </td>
-                <td>
-                    <a href="?page=simply-code-edit&snippet=<?= urlencode($snippet['name']) ?>" class="button">Editar</a>
-                    <a href="?page=simply-code-delete&snippet=<?= urlencode($snippet['name']) ?>" class="button" onclick="return confirm('¿Estás seguro de que quieres eliminar este snippet?')">Eliminar</a>
+                    <a href="<?php echo add_query_arg(['page' => 'simply-code-new', 'edit' => $snippet['name']], admin_url('admin.php')); ?>" class="button" title="Editar">✎</a>
                 </td>
             </tr>
             <?php endforeach; ?>
+            <?php if (empty($snippets)): ?>
+            <tr>
+                <td colspan="4">No hay snippets disponibles.</td>
+            </tr>
+            <?php endif; ?>
         </tbody>
     </table>
 </div>
