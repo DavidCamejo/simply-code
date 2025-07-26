@@ -1,5 +1,28 @@
 <?php
 class Simply_Snippet_Manager {
+    private static $order_cache = null;
+    private static $snippets_cache = null;
+    
+    /**
+     * Obtiene el orden actual de los snippets
+     */
+    private static function get_order() {
+        if (self::$order_cache === null) {
+            $order_file = SC_PATH . 'includes/snippets-order.php';
+            self::$order_cache = file_exists($order_file) ? include $order_file : [];
+        }
+        return self::$order_cache;
+    }
+
+    /**
+     * Invalida las cachés internas
+     */
+    private static function invalidate_cache() {
+        self::$order_cache = null;
+        self::$snippets_cache = null;
+        clearstatcache();
+    }
+
     public static function load_snippets() {
         $dir = SC_STORAGE . '/snippets/';
         if (!is_dir($dir)) return;
@@ -107,49 +130,43 @@ class Simply_Snippet_Manager {
         ]));
     }
 
+    /**
+     * Lista todos los snippets
+     */
     public static function list_snippets($apply_order = true) {
+        if (self::$snippets_cache !== null && $apply_order) {
+            return self::$snippets_cache;
+        }
+
         $snippets = [];
         $dir = SC_STORAGE . '/snippets/';
         if (!is_dir($dir)) return $snippets;
 
-        // Limpiar caché del sistema de archivos
-        clearstatcache(true, $dir);
-        
-        // Obtener el orden actual
-        $order_file = SC_PATH . 'includes/snippets-order.php';
-        $order = [];
-        if ($apply_order && file_exists($order_file)) {
-            clearstatcache(true, $order_file);
-            $order = include $order_file;
-        }
-
-        // Primero, recopilar todos los snippets existentes
+        // Obtener snippets y orden
+        $order = $apply_order ? self::get_order() : [];
         $available_snippets = [];
+
         foreach (scandir($dir) as $file) {
             if (pathinfo($file, PATHINFO_EXTENSION) === 'php') {
                 $name = basename($file, '.php');
                 $json_file = $dir . $name . '.json';
-                clearstatcache(true, $json_file);
                 
-                $desc = '';
-                $active = true;
+                $meta = [];
                 if (file_exists($json_file)) {
-                    $meta = json_decode(file_get_contents($json_file), true);
-                    $desc = $meta['description'] ?? '';
-                    $active = isset($meta['active']) ? $meta['active'] : true;
+                    $meta = json_decode(file_get_contents($json_file), true) ?: [];
                 }
-                
+
                 $available_snippets[$name] = [
                     'name' => $name,
-                    'description' => $desc,
-                    'active' => $active
+                    'description' => $meta['description'] ?? '',
+                    'active' => $meta['active'] ?? true
                 ];
             }
         }
 
-        // Si hay un orden definido, úsalo para construir el array final
+        // Aplicar orden si es necesario
         if ($apply_order && !empty($order)) {
-            // Primero, añadir los snippets en el orden especificado
+            // Primero los snippets ordenados
             foreach ($order as $name) {
                 if (isset($available_snippets[$name])) {
                     $snippets[] = $available_snippets[$name];
@@ -158,35 +175,35 @@ class Simply_Snippet_Manager {
             }
         }
 
-        // Añadir cualquier snippet restante que no esté en el orden
+        // Agregar snippets restantes
         foreach ($available_snippets as $snippet) {
             $snippets[] = $snippet;
+        }
+
+        if ($apply_order) {
+            self::$snippets_cache = $snippets;
         }
 
         return $snippets;
     }
 
+    /**
+     * Actualiza el orden de los snippets
+     */
     public static function update_snippets_order($names) {
         $order_file = SC_PATH . 'includes/snippets-order.php';
         
-        // Asegurar que el directorio existe
         if (!is_dir(dirname($order_file))) {
             mkdir(dirname($order_file), 0755, true);
         }
 
-        // Escribir el nuevo orden
-        $success = file_put_contents(
-            $order_file, 
-            "<?php\nreturn " . var_export($names, true) . ";\n",
-            LOCK_EX
-        );
-
-        if ($success !== false) {
-            // Limpiar la caché después de actualizar el orden
-            clearstatcache(true, $order_file);
+        $content = "<?php\nreturn " . var_export($names, true) . ";\n";
+        $result = file_put_contents($order_file, $content, LOCK_EX);
+        
+        if ($result !== false) {
+            self::invalidate_cache();
             return true;
         }
-
         return false;
     }
 
