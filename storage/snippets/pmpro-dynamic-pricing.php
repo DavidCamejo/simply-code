@@ -1,41 +1,25 @@
 <?php
 // @description Dynamic pricing for PMPro
-// Función para registrar todos los hooks necesarios
-function register_pmpro_dynamic_pricing_hooks() {
-    // Registrar el hook para los campos dinámicos
-    add_action('init', 'nextcloud_add_dynamic_fields');
-    
-    // Registrar los filtros para modificar el precio
-    add_filter('pmpro_checkout_level', 'nextcloud_modify_level_pricing');
-    add_filter('pmpro_after_checkout_level', 'nextcloud_modify_level_pricing');
-    
-    // Registrar el hook para guardar la configuración
-    add_action('pmpro_after_checkout', 'nextcloud_save_configuration_and_provision', 10, 2);
-    
-    // Registrar el hook para mostrar la configuración
-    add_action('pmpro_account_bullets_bottom', 'nextcloud_show_member_config');
-}
 
-// Registrar todos los hooks
-add_action('init', 'register_pmpro_dynamic_pricing_hooks', 5);
+if (!defined('ABSPATH')) exit;
 
 // Agregar campos dinámicos de Nextcloud usando PMPro Register Helper
 function nextcloud_add_dynamic_fields(){
     if(!function_exists('pmprorh_add_registration_field')) {
         return false;
     }
-
+    
     // Obtener el nivel de membresía actualmente seleccionado en el checkout
     global $pmpro_checkout_level;
     $current_level_id = isset($pmpro_checkout_level->id) ? (int)$pmpro_checkout_level->id : 0;
-
+    
     // Solo agregar campos si el nivel es alguno de la lista
     if (!in_array($current_level_id, array(10, 11, 12, 13, 14))) {
         return;
     }
     
     $fields = array();
-
+    
     // Campo de almacenamiento
     $fields[] = new PMProRH_Field(
         'storage_space',
@@ -64,8 +48,7 @@ function nextcloud_add_dynamic_fields(){
                 '90tb' => '90 Terabytes',
                 '100tb' => '100 Terabytes'
             ),
-
-            'profile' => false,
+            'profile' => true,
             'required' => false,
             'memberslistcsv' => true,
             'addmember' => true,
@@ -88,7 +71,7 @@ function nextcloud_add_dynamic_fields(){
                 'quadrennial' => 'Quadrienal (-25%)',
                 'quinquennial' => 'Quinquenal (-30%)'
             ),
-            'profile' => false,
+            'profile' => true,
             'required' => false,
             'memberslistcsv' => true,
             'addmember' => true,
@@ -112,19 +95,50 @@ function nextcloud_add_dynamic_fields(){
             'divclass' => 'pmpro_checkout-field-price-display'
         )
     );
-
+    
     foreach($fields as $field){
         pmprorh_add_registration_field('Configuração do plano', $field);
     }
 }
-add_action('init', 'nextcloud_add_dynamic_fields');
+
+// Función para pasar datos dinámicos al JS
+function nextcloud_localize_pricing_script() {
+    // Solo en páginas relevantes
+    if (!is_page(pmpro_getOption('checkout_page_slug')) && 
+        !is_page(pmpro_getOption('billing_page_slug')) && 
+        !is_page(pmpro_getOption('account_page_slug'))) {
+        return;
+    }
+    
+    global $pmpro_level;
+    
+    // Obtener datos del nivel actual
+    $level_id = 1;
+    $base_price = 0;
+    
+    if (!empty($pmpro_level) && isset($pmpro_level->initial_payment)) {
+        $level_id = $pmpro_level->id;
+        $base_price = floatval($pmpro_level->initial_payment);
+    }
+    
+    // Localizar el script (pasar datos de PHP a JS)
+    wp_localize_script(
+        'simply-snippet-pmpro-dynamic-pricing', // Handle que usa Simply Code
+        'nextcloud_pricing',
+        array(
+            'level_id' => $level_id,
+            'base_price' => $base_price,
+            'currency_symbol' => 'R$'
+        )
+    );
+}
 
 // Modificar o preço do nível baseado nas opções selecionadas
 function nextcloud_modify_level_pricing($level) {
     // Verificar se estamos processando um checkout com os campos customizados
     $storage_space = pmpro_getParam('storage_space', 'POST');
     $payment_frequency = pmpro_getParam('payment_frequency', 'POST');
-
+    
     if (empty($storage_space) || empty($payment_frequency)) {
         return $level;
     }
@@ -133,8 +147,7 @@ function nextcloud_modify_level_pricing($level) {
     $level_id = $level->id;
     $base_price = $level->initial_payment;
     $add_tb = 120;
-    //$add_tb2 = 118;
-    //$add_tb3 = 115;
+    
     $storage_prices = array(
         '1tb' => $base_price,
         '2tb' => $base_price + $add_tb,
@@ -157,7 +170,7 @@ function nextcloud_modify_level_pricing($level) {
         '90tb' => $base_price + ($add_tb * 89),
         '100tb' => $base_price + ($add_tb * 99)
     );
-
+    
     // Meses según frecuencia (igual que en JavaScript)
     $frequency_months = array(
         'monthly' => 1,
@@ -205,17 +218,17 @@ function nextcloud_modify_level_pricing($level) {
         $level->cycle_period = 'Month';
         $level->billing_amount = $total_price;
     }
-        elseif ($payment_frequency === 'quadrennial') {
+    elseif ($payment_frequency === 'quadrennial') {
         $level->cycle_number = 48;
         $level->cycle_period = 'Month';
         $level->billing_amount = $total_price;
     }
-        elseif ($payment_frequency === 'quinquennial') {
+    elseif ($payment_frequency === 'quinquennial') {
         $level->cycle_number = 60;
         $level->cycle_period = 'Month';
         $level->billing_amount = $total_price;
     }
-
+    
     // Configuraciones adicionales
     $level->trial_amount = 0;
     $level->trial_limit = 0;
@@ -225,54 +238,41 @@ function nextcloud_modify_level_pricing($level) {
     
     return $level;
 }
-add_filter('pmpro_checkout_level', 'nextcloud_modify_level_pricing');
-add_filter('pmpro_after_checkout_level', 'nextcloud_modify_level_pricing');
 
-// Salvar configuração na confirmação da compra depois da criação da assinatura, mas antes do provisioning
+// Salvar configuração na confirmação da compra
 function nextcloud_save_configuration_and_provision($user_id, $morder) {
-    // $morder contém os detalhes do pedido e do nível. Para os campos customizados, ainda precisamos de $_REQUEST.
-    
-    // Certifique-se de que estamos no contexto de um checkout com seus campos customizados
     if (!isset($_REQUEST['storage_space']) || !isset($_REQUEST['payment_frequency'])) {
         return;
     }
-
-    // Capture os valores dos campos customizados
+    
     $storage_space = sanitize_text_field($_REQUEST['storage_space']);
     $payment_frequency = sanitize_text_field($_REQUEST['payment_frequency']);
     
-    // Salvar meta dados do usuário
     update_user_meta($user_id, 'nextcloud_storage_space', $storage_space);
     update_user_meta($user_id, 'nextcloud_payment_frequency', $payment_frequency);
-        
-    // Salvar configuração completa como JSON para facilitar futuras consultas
+    
     $config = array(
         'storage_space' => $storage_space,
         'payment_frequency' => $payment_frequency,
         'created_at' => current_time('mysql'),
-        'level_id' => $morder->membership_id // Use the level ID from the order
+        'level_id' => $morder->membership_id
     );
-        
     update_user_meta($user_id, 'nextcloud_config', json_encode($config));
-        
+    
     error_log("PMPro Nextcloud: Configuração salva para usuário {$user_id}");
-
 }
-// permite que PMPro faça seu trabalho e então a configuração é salva.
-add_action('pmpro_after_checkout', 'nextcloud_save_configuration_and_provision', 10, 2);
 
 // Mostrar configuração na área de membros
 function nextcloud_show_member_config() {
     $user_id = get_current_user_id();
     if (!$user_id) return;
-
+    
     $membership = pmpro_getMembershipLevelForUser($user_id);
-
     $config_json = get_user_meta($user_id, 'nextcloud_config', true);
+    
     if ($config_json) {
         $config = json_decode($config_json, true);
         
-        // Mapeamentos para exibição
         $storage_labels = array(
             '1tb' => '1 Terabyte',
             '2tb' => '2 Terabytes',
@@ -305,14 +305,12 @@ function nextcloud_show_member_config() {
             'quadrennial' => 'Quadrienal',
             'quinquennial' => 'Quinquenal'
         );
-        
         ?>
         <div class="pmpro_account-profile-field">
             <h3>Detalhes do plano <strong><?php echo $membership->name; ?></strong></h3>
             <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 10px 0;">
                 <p><strong>Armazenamento:</strong> <?php echo esc_html($storage_labels[$config['storage_space']] ?? $config['storage_space']); ?></p>
                 <p><strong>Plano de Pagamento:</strong> <?php echo esc_html($frequency_labels[$config['payment_frequency']] ?? $config['payment_frequency']); ?></p>
-                <p><hr/></p>
                 <p><small><strong>Configurado em:</strong> <?php echo date('d/m/Y H:i', strtotime($config['created_at'])); ?></small></p>
                 <p><small><strong>Próximo pagamento:</strong> <?php echo date('d/m/Y', strtotime($membership->next_payment_date)); ?></small></p>
             </div>
@@ -320,4 +318,11 @@ function nextcloud_show_member_config() {
         <?php
     }
 }
+
+// Registrar todos los hooks
+add_action('init', 'nextcloud_add_dynamic_fields');
+add_action('wp_enqueue_scripts', 'nextcloud_localize_pricing_script', 20); // Prioridad 20 para que se ejecute después del encolado
+add_filter('pmpro_checkout_level', 'nextcloud_modify_level_pricing');
+add_filter('pmpro_after_checkout_level', 'nextcloud_modify_level_pricing');
+add_action('pmpro_after_checkout', 'nextcloud_save_configuration_and_provision', 10, 2);
 add_action('pmpro_account_bullets_bottom', 'nextcloud_show_member_config');

@@ -34,3 +34,4 @@ require_once SC_PATH . 'admin/class-snippet-editor.php';
 // Registrar acciones principales
 add_action('after_setup_theme', ['Simply_Snippet_Manager', 'load_snippets'], 5);
 add_action('admin_menu', ['Simply_Code_Admin', 'register_menu']);
+add_action('wp_enqueue_scripts', ['Simply_Snippet_Manager', 'enqueue_snippet_assets']);

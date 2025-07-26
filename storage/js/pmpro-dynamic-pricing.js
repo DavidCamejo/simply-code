@@ -1,17 +1,17 @@
 // Tu código JS aquí
 jQuery(document).ready(function($) {
-    // Es crucial verificar si nextcloud_pricing está definido
+    // Verificar que las variables de PHP estén disponibles
     if (typeof nextcloud_pricing === 'undefined') {
-        console.error('Error: nextcloud_pricing no está definido. Asegúrate de que wp_localize_script se ejecuta correctamente.');
-        return; // Salir si no está definido
+        console.log('nextcloud_pricing no está definido');
+        return;
     }
-
+    
     // Configuración desde PHP
     var levelId = nextcloud_pricing.level_id || 1;
     var basePrice = parseInt(nextcloud_pricing.base_price) || 0;
     var currencySymbol = nextcloud_pricing.currency_symbol || 'R$';
     var addTb = 120; // 1 TB adicional (fijo)
-
+    
     // Precio base x cantidad de TB
     var storagePrices = {
         '1tb': basePrice,
@@ -82,19 +82,14 @@ jQuery(document).ready(function($) {
     $('#storage_space, #payment_frequency').change(updateTotalPrice);
     
     // Inicialización
-    // Envuelve esto en un $(function() { ... }) que es un shorthand para $(document).ready()
     $(function() {
-        // Establece los valores iniciales solo si los elementos existen
-        if ($('#storage_space').length) {
-            $('#storage_space').val('1tb');
-        }
-        if ($('#payment_frequency').length) {
-            $('#payment_frequency').val('monthly');
-        }
+        $('#storage_space').val('1tb');
+        $('#payment_frequency').val('monthly');
         updateTotalPrice();
         $('.pmpro_checkout-field-price-display').show();
         
         // Debug (opcional)
         console.log('Precio base desde PHP:', basePrice);
+        console.log('nextcloud_pricing:', nextcloud_pricing);
     });
 });

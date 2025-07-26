@@ -82,6 +82,43 @@ class Simply_Snippet_Manager {
         }
     }
 
+    /**
+     * Encola automáticamente los assets JS y CSS de los snippets activos
+     */
+    public static function enqueue_snippet_assets() {
+        $dir_js = SC_STORAGE . '/js/';
+        $dir_css = SC_STORAGE . '/css/';
+        $snippets = self::list_snippets(true);
+
+        foreach ($snippets as $snippet) {
+            if (empty($snippet['active'])) continue;
+            $name = $snippet['name'];
+
+            // JS
+            $js_file = $dir_js . $name . '.js';
+            if (file_exists($js_file)) {
+                wp_enqueue_script(
+                    'simply-snippet-' . $name,
+                    plugins_url('storage/js/' . $name . '.js', SC_PATH . 'simply-code.php'),
+                    ['jquery'], // Dependencia de jQuery
+                    filemtime($js_file),
+                    true // En footer
+                );
+            }
+
+            // CSS
+            $css_file = $dir_css . $name . '.css';
+            if (file_exists($css_file)) {
+                wp_enqueue_style(
+                    'simply-snippet-' . $name,
+                    plugins_url('storage/css/' . $name . '.css', SC_PATH . 'simply-code.php'),
+                    [],
+                    filemtime($css_file)
+                );
+            }
+        }
+    }
+
     public static function toggle_snippet_status($name, $active) {
         $json_file = SC_STORAGE . "/snippets/{$name}.json";
         $snippet_data = [];
