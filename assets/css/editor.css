@@ -1,0 +1,39 @@
+.sc-editor-tabs ul {
+    list-style: none;
+    padding: 0;
+    margin: 20px 0 0;
+    border-bottom: 1px solid #ccc;
+}
+
+.sc-editor-tabs li {
+    display: inline-block;
+    padding: 10px 20px;
+    margin: 0;
+    cursor: pointer;
+    border: 1px solid transparent;
+    border-bottom: none;
+    margin-bottom: -1px;
+}
+
+.sc-editor-tabs li.active {
+    background: #fff;
+    border-color: #ccc;
+    border-bottom-color: #fff;
+}
+
+.tab-content {
+    display: none;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-top: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.tab-content textarea {
+    width: 100%;
+    margin: 0;
+    resize: vertical;
+}
