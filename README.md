@@ -23,21 +23,37 @@ Simply Code es un plugin de WordPress minimalista y eficiente que moderniza la f
 ## Estructura de archivos
 
 ```
-simply-code/
-├── admin/
-│   ├── class-admin-page.php
-│   ├── class-snippet-editor.php
-│   └── views/
-├── includes/
-│   ├── class-snippet-manager.php
-│   └── class-syntax-checker.php
-├── storage/
-│   ├── snippets/
-│   ├── js/
-│   ├── css/
-│   └── backups/
-├── templates/
-│   └── basic-snippet.php
+simply-code/  
+├── admin/  
+│   ├── class-admin-page.php  
+│   ├── class-snippet-editor.php  
+│   └── views/  
+│       ├── snippet-editor.php  
+│       └── snippets-list.php 
+├── assets/  
+│   ├── css/  
+│   │   └── editor.css  
+│   ├── js/  
+│   │   └── editor.js  
+│   └── images/  
+│       └── banner.jpg  
+├── includes/  
+│   ├── class-snippet-manager.php  
+│   ├── class-syntax-checker.php 
+│   └── snippets-order.php
+├── storage/  
+│   ├── snippets/  
+│   ├── js/  
+│   ├── css/  
+│   └── backups/  
+├── templates/  
+│   ├── class.php
+│   ├── configuration.php
+│   ├── function.php
+│   └── hook.php
+├── CHANGELOG.md  
+├── README.md  
+├── readme.txt 
 └── simply-code.php
 ```
 
