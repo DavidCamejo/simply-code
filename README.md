@@ -107,6 +107,18 @@ El modo seguro realiza las siguientes validaciones:
 - **Licencia**: GPL v2 o posterior
 - **Requiere privilegios**: `manage_options`
 
+## Detalles técnicos recientes
+
+- El plugin crea automáticamente las carpetas necesarias (`storage/snippets/`, `storage/js/`, `storage/css/`, `templates/`) si no existen, asegurando que el entorno esté listo desde la activación.
+- El sistema de carga modular utiliza clases separadas para la gestión de snippets, validación de sintaxis y la interfaz de administración.
+- Los hooks principales registrados son:
+  - `after_setup_theme` para cargar los snippets al inicio.
+  - `admin_menu` para registrar el menú de administración.
+  - `wp_enqueue_scripts` para cargar los assets de los snippets en el frontend.
+- El almacenamiento de los snippets y recursos asociados se realiza exclusivamente en el sistema de archivos, nunca en la base de datos.
+
+Consulta el archivo CHANGELOG.md para un historial detallado de cambios y mejoras.
+
 ## FAQ
 
 ### ¿Por qué usar Simply Code en lugar de functions.php?
