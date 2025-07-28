@@ -1,6 +1,6 @@
 <div class="wrap">
     <h1>Simply Code</h1>
-    
+
     <style>
         /* Toggle Switch Styles */
         .switch {
@@ -9,13 +9,13 @@
             width: 50px;
             height: 24px;
         }
-        
-        .switch input { 
+
+        .switch input {
             opacity: 0;
             width: 0;
             height: 0;
         }
-        
+
         .slider {
             position: absolute;
             cursor: pointer;
@@ -26,7 +26,7 @@
             background-color: #ccc;
             transition: .4s;
         }
-        
+
         .slider:before {
             position: absolute;
             content: "";
@@ -37,39 +37,49 @@
             background-color: white;
             transition: .4s;
         }
-        
+
         input:checked + .slider {
             background-color: #2271b1;
         }
-        
+
         input:focus + .slider {
             box-shadow: 0 0 1px #2271b1;
         }
-        
+
         input:checked + .slider:before {
             transform: translateX(26px);
         }
-        
+
         .slider.round {
             border-radius: 24px;
         }
-        
+
         .slider.round:before {
             border-radius: 50%;
         }
-        
+
         /* Inactive snippet row styling */
         tr.inactive-snippet {
             opacity: 0.6;
             background-color: #f5f5f5;
         }
+
+        /* Delete button styling */
+        .delete-button {
+            color: #dc3232;
+        }
+
+        .delete-button:hover {
+            color: #dc3232;
+            opacity: 0.8;
+        }
     </style>
-    
+
     <?php
     // Safe mode toggle
     $safe_mode = get_option(Simply_Code_Admin::OPTION_SAFE_MODE, 'on');
     ?>
-    
+
     <div class="tablenav top">
         <div class="alignleft actions">
             <form method="post" style="display:inline;">
@@ -86,7 +96,7 @@
         </div>
         <br class="clear">
     </div>
-    
+
     <table class="wp-list-table widefat fixed striped">
         <thead>
             <tr>
@@ -120,6 +130,7 @@
                             <button type="submit" class="button" title="Subir">↑</button>
                         </form>
                     <?php endif; ?>
+
                     <?php if ($i < count($snippets) - 1): ?>
                         <form method="post" style="display:inline;">
                             <?php wp_nonce_field('simply_code_actions'); ?>
@@ -127,7 +138,15 @@
                             <button type="submit" class="button" title="Bajar">↓</button>
                         </form>
                     <?php endif; ?>
+
                     <a href="<?php echo add_query_arg(['page' => 'simply-code-new', 'edit' => $snippet['name']], admin_url('admin.php')); ?>" class="button" title="Editar">✎</a>
+
+                    <form method="post" style="display:inline;" onsubmit="return confirm('¿Estás seguro de que deseas eliminar este snippet?');">
+                        <?php wp_nonce_field('simply_code_actions'); ?>
+                        <input type="hidden" name="snippet_name" value="<?= esc_attr($snippet['name']) ?>">
+                        <input type="hidden" name="delete_snippet" value="1">
+                        <button type="submit" class="button delete-button" title="Eliminar">🗑</button>
+                    </form>
                 </td>
             </tr>
             <?php endforeach; ?>
@@ -139,3 +158,20 @@
         </tbody>
     </table>
 </div>
+
+<script>
+// Confirmación adicional para eliminar snippets
+document.addEventListener('DOMContentLoaded', function() {
+    const deleteForms = document.querySelectorAll('form[onsubmit*="confirm"]');
+    deleteForms.forEach(form => {
+        form.addEventListener('submit', function(e) {
+            const snippetName = this.querySelector('input[name="snippet_name"]').value;
+            
+            if (!confirm(`¿Estás completamente seguro de que quieres eliminar el snippet "${snippetName}"?\n\nEsta acción eliminará permanentemente:\n- El código PHP\n- El código JavaScript\n- El código CSS\n- Todos los metadatos\n\nEsta acción NO se puede deshacer.`)) {
+                e.preventDefault();
+                return false;
+            }
+        });
+    });
+});
+</script>

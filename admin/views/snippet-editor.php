@@ -1,15 +1,19 @@
 <div class="wrap">
     <h1><?php echo $edit_mode ? 'Editar Snippet' : 'Nuevo Snippet'; ?></h1>
 
-    <form method="post" id="snippet-form">
+    <form method="post" action="" id="snippet-form">
+        <?php wp_nonce_field('simply_code_actions'); ?>
         <table class="form-table">
             <tr>
                 <th scope="row"><label for="snippet_name">Nombre del Snippet</label></th>
                 <td>
-                    <input name="snippet_name" type="text" id="snippet_name" 
-                           value="<?php echo $edit_mode ? esc_attr($_GET['edit']) : ''; ?>"
+                    <input type="text"
+                           id="snippet_name"
+                           name="snippet_name"
+                           value="<?php echo $edit_mode && $snippet ? esc_attr($snippet['name']) : ''; ?>"
+                           <?php echo $edit_mode ? 'readonly' : ''; ?>
                            class="regular-text"
-                           <?php echo $edit_mode ? 'readonly' : ''; ?> required>
+                           required>
                 </td>
             </tr>
             <tr>
@@ -55,7 +59,7 @@
             <textarea name="css_code" rows="20" style="width: 100%; font-family: monospace;"><?php echo esc_textarea($css_code); ?></textarea>
         </div>
 
-        <?php submit_button($edit_mode ? 'Actualizar Snippet' : 'Guardar Snippet'); ?>
+        <?php submit_button($edit_mode ? 'Actualizar Snippet' : 'Crear Snippet'); ?>
     </form>
 </div>
 
