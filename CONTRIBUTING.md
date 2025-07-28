@@ -118,5 +118,3 @@ Al contribuir con código o snippets a Simply Code, aceptas que tu contribución
 
 ¡Gracias por ayudar a hacer Simply Code mejor para todos!
 ```
-
----
