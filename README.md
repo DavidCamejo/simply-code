@@ -52,6 +52,7 @@ simply-code/
 │   ├── function.php
 │   └── hook.php
 ├── CHANGELOG.md  
+├── CONTRIBUTING.md  
 ├── README.md  
 ├── readme.txt 
 └── simply-code.php
