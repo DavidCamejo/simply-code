@@ -1,6 +1,6 @@
 # Simply Code
 
-![Simply Code Banner](assets/images/banner.png)
+![Simply Code Banner](assets/images/banner.jpg)
 
 Simply Code es un plugin de WordPress minimalista y eficiente que moderniza la forma de gestionar código personalizado en tu sitio. Diseñado como una alternativa modular y profesional a `functions.php`, permite administrar snippets de código como módulos independientes. A diferencia de otras soluciones, Simply Code utiliza un sistema de archivos directo en lugar de la base de datos, lo que resulta en mejor rendimiento y mayor portabilidad.
 
