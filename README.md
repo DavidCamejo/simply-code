@@ -155,7 +155,7 @@ Simply Code ofrece una gestión modular del código, con interfaz gráfica profe
 
 ### ¿Cómo migro mis snippets a otra instalación?
 
-Simplemente copia el contenido de la carpeta `storage/snippets/` a la nueva instalación. Al estar basado en archivos, la migración es sencilla y directa.
+Simplemente copia el contenido de la carpeta `storage/` y el archivo `includes/snippets-order.php` a la nueva instalación. Al estar basado en archivos, la migración es sencilla y directa.
 
 ### ¿Se pierden los snippets al actualizar el plugin?
 
