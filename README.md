@@ -92,6 +92,18 @@ add_action('init', function() {
 // Configuración personalizada
 define('MI_CONSTANTE', 'valor');
 ```
+```js
+// JavaScript: Mostrar alerta en el frontend
+document.addEventListener('DOMContentLoaded', function() {
+    alert('¡Hola desde Simply Code!');
+});
+```
+```css
+/* CSS: Cambiar color de fondo del body */
+body {
+    background-color: #f5f5f5;
+}
+```
 
 ### Gestión de snippets
 
