@@ -2,7 +2,7 @@
 /*
 Plugin Name: Simply Code
 Description: Gestión modular de código personalizado como mini-plugins. La alternativa moderna a functions.php.
-Version: 3.0
+Version: 3.5.0
 Author: David Camejo & AI
 */
 
@@ -30,8 +30,10 @@ require_once SC_PATH . 'includes/class-snippet-manager.php';
 require_once SC_PATH . 'includes/class-syntax-checker.php';
 require_once SC_PATH . 'admin/class-admin-page.php';
 require_once SC_PATH . 'admin/class-snippet-editor.php';
+require_once SC_PATH . 'includes/class-hook-detector.php';
 
 // Registrar acciones principales
 add_action('after_setup_theme', ['Simply_Snippet_Manager', 'load_snippets'], 5);
 add_action('admin_menu', ['Simply_Code_Admin', 'register_menu']);
 add_action('wp_enqueue_scripts', ['Simply_Snippet_Manager', 'enqueue_snippet_assets']);
+add_action('wp_ajax_simply_code_detect_hooks', ['Simply_Snippet_Editor', 'ajax_detect_hooks']);

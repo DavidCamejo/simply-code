@@ -1,0 +1,9 @@
+/* Dynamic pricing for PMPro CSS ebf0f5 */
+#total_price_display {
+    background-color: #edf5f9 !important;
+    border: none !important;
+    font-size: 20px !important;
+    font-weight: 600 !important;
+    cursor: default;
+    pointer-events: none;
+}

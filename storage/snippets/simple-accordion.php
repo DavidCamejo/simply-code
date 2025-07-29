@@ -7,8 +7,6 @@
 // [accordion_item title="Planos Solo"] [generate_pricing_tables tipo="solo"] [/accordion_item]
 // [/simple_accordion]
 
-if (!defined('ABSPATH')) exit;
-
 function simple_accordion_shortcode($atts, $content = null) {
     $atts = shortcode_atts(array(
         'default_icon' => 'dashicons-menu', // Icono por defecto si no se especifica

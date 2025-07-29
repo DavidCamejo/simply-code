@@ -56,9 +56,9 @@ class Simply_Snippet_Manager {
     }
 
     /**
-     * Save snippet with proper error handling and return value - MÉTODO FALTANTE
+     * Save snippet with hooks priority support - VERSIÓN LIMPIA Y CORREGIDA
      */
-    public static function save_snippet($name, $php, $js, $css, $description = '', $active = true) {
+    public static function save_snippet($name, $php, $js, $css, $description = '', $active = true, $hook_priorities = []) {
         try {
             // Crear directorios si no existen
             $directories = [
@@ -77,10 +77,46 @@ class Simply_Snippet_Manager {
                 }
             }
 
+            // Detectar hooks automáticamente
+            $detected_hooks = Simply_Hook_Detector::detect_hooks($php);
+            
+            // Combinar con prioridades configuradas manualmente
+            $final_hooks = [];
+            foreach ($detected_hooks as $hook) {
+                $hook_name = $hook['name'];
+                $final_hooks[$hook_name] = [
+                    'type' => $hook['type'],
+                    'priority' => $hook_priorities[$hook_name] ?? $hook['priority'],
+                    'accepted_args' => $hook['accepted_args'],
+                    'auto_detected' => true
+                ];
+            }
+            
+            // Agregar hooks configurados manualmente
+            foreach ($hook_priorities as $hook_name => $priority) {
+                if (!isset($final_hooks[$hook_name])) {
+                    $final_hooks[$hook_name] = [
+                        'type' => 'manual',
+                        'priority' => (int)$priority,
+                        'accepted_args' => 1,
+                        'auto_detected' => false
+                    ];
+                }
+            }
+            
+            // Crear metadatos completos
+            $metadata = [
+                'description' => $description,
+                'last_updated' => date('Y-m-d H:i:s'),
+                'active' => $active,
+                'hooks' => $final_hooks,
+                'load_priority' => Simply_Hook_Detector::calculate_load_priority($final_hooks)
+            ];
+
+            // Crear backup si existe el archivo original
             $php_file = SC_STORAGE . "/snippets/{$name}.php";
             $backup_dir = SC_STORAGE . "/backups/";
 
-            // Crear backup si existe el archivo original
             if (file_exists($php_file)) {
                 $backup_file = $backup_dir . $name . '.php.' . time();
                 if (!copy($php_file, $backup_file)) {
@@ -93,11 +129,7 @@ class Simply_Snippet_Manager {
                 SC_STORAGE . "/snippets/{$name}.php" => $php,
                 SC_STORAGE . "/js/{$name}.js" => $js,
                 SC_STORAGE . "/css/{$name}.css" => $css,
-                SC_STORAGE . "/snippets/{$name}.json" => json_encode([
-                    'description' => $description,
-                    'last_updated' => date('Y-m-d H:i:s'),
-                    'active' => $active
-                ], JSON_PRETTY_PRINT)
+                SC_STORAGE . "/snippets/{$name}.json" => json_encode($metadata, JSON_PRETTY_PRINT)
             ];
 
             $all_success = true;
@@ -123,22 +155,59 @@ class Simply_Snippet_Manager {
     }
 
     /**
-     * Optimized snippet loading with error handling
+     * Load snippets with priority ordering
      */
     public static function load_snippets() {
         $dir = SC_STORAGE . '/snippets/';
         if (!is_dir($dir)) return;
-
-        $order = self::get_order();
-        $all_snippets = self::get_available_snippets();
-        $ordered = array_unique(array_merge($order, $all_snippets));
+        
+        $all_snippets = self::get_snippets_with_priorities();
         $safe_mode = get_option(Simply_Code_Admin::OPTION_SAFE_MODE, 'on') === 'on';
-
-        foreach ($ordered as $basename) {
-            if (!self::load_single_snippet($basename, $safe_mode)) {
-                error_log("Simply Code: Failed to load snippet: {$basename}");
+        
+        foreach ($all_snippets as $snippet_data) {
+            if (!self::load_single_snippet($snippet_data['name'], $safe_mode)) {
+                error_log("Simply Code: Failed to load snippet: {$snippet_data['name']}");
             }
         }
+    }
+
+    /**
+     * Get snippets ordered by priority
+     */
+    private static function get_snippets_with_priorities() {
+        $dir = SC_STORAGE . '/snippets/';
+        $snippets = [];
+        
+        $order = self::get_order();
+        
+        // Recopilar todos los snippets con sus metadatos
+        foreach (glob($dir . '*.php') as $file) {
+            $name = basename($file, '.php');
+            $json_file = $dir . $name . '.json';
+            
+            $metadata = [];
+            if (file_exists($json_file)) {
+                $metadata = json_decode(file_get_contents($json_file), true) ?: [];
+            }
+            
+            if ($metadata['active'] ?? true) {
+                $snippets[] = [
+                    'name' => $name,
+                    'load_priority' => $metadata['load_priority'] ?? 10,
+                    'order_index' => array_search($name, $order) !== false ? array_search($name, $order) : 999
+                ];
+            }
+        }
+        
+        // Ordenar primero por load_priority, luego por order_index
+        usort($snippets, function($a, $b) {
+            if ($a['load_priority'] === $b['load_priority']) {
+                return $a['order_index'] <=> $b['order_index'];
+            }
+            return $a['load_priority'] <=> $b['load_priority'];
+        });
+        
+        return $snippets;
     }
 
     /**
@@ -187,21 +256,6 @@ class Simply_Snippet_Manager {
 
         $meta = json_decode(file_get_contents($json_file), true);
         return !isset($meta['active']) || $meta['active'] === true;
-    }
-
-    /**
-     * Get available snippets efficiently
-     */
-    private static function get_available_snippets() {
-        $dir = SC_STORAGE . '/snippets/';
-        $snippets = [];
-
-        $files = glob($dir . '*.php');
-        foreach ($files as $file) {
-            $snippets[] = basename($file, '.php');
-        }
-
-        return $snippets;
     }
 
     /**

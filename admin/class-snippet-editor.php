@@ -56,13 +56,15 @@ class Simply_Snippet_Editor {
             true;
 
         // Guardar snippet
+        // Actualizar el save_snippet call en handle_post_request
         $save_result = Simply_Snippet_Manager::save_snippet(
             $form_data['snippet_name'],
             $form_data['php_code'],
             $form_data['js_code'],
             $form_data['css_code'],
             $form_data['description'],
-            $active
+            $active,
+            $form_data['hook_priorities'] // Nuevo parámetro
         );
 
         if (!$save_result) {
@@ -74,17 +76,44 @@ class Simply_Snippet_Editor {
         self::redirect_with_success($edit_mode, $form_data['snippet_name']);
     }
 
+    // Agregar AJAX handler para detección de hooks
+    public static function ajax_detect_hooks() {
+        check_ajax_referer('simply_code_detect_hooks', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_die('No tienes permisos suficientes');
+        }
+        
+        $php_code = stripslashes($_POST['php_code'] ?? '');
+        $hooks = Simply_Hook_Detector::detect_hooks($php_code);
+        $critical_hooks = Simply_Hook_Detector::get_critical_hooks();
+        
+        wp_send_json_success([
+            'hooks' => $hooks,
+            'critical_hooks' => $critical_hooks
+        ]);
+    }
+
     /**
      * Sanitize form data
      */
+    // En class-snippet-editor.php - actualizar sanitize_form_data
     private static function sanitize_form_data($post_data) {
+        $hook_priorities = [];
+        if (isset($post_data['hook_priorities']) && is_array($post_data['hook_priorities'])) {
+            foreach ($post_data['hook_priorities'] as $hook => $priority) {
+                $hook_priorities[sanitize_text_field($hook)] = (int)$priority;
+            }
+        }
+        
         return [
             'snippet_name' => sanitize_file_name($post_data['snippet_name'] ?? ''),
             'php_code' => stripslashes($post_data['php_code'] ?? ''),
             'js_code' => stripslashes($post_data['js_code'] ?? ''),
             'css_code' => stripslashes($post_data['css_code'] ?? ''),
             'description' => stripslashes($post_data['description'] ?? ''),
-            'template' => sanitize_text_field($post_data['template'] ?? '')
+            'template' => sanitize_text_field($post_data['template'] ?? ''),
+            'hook_priorities' => $hook_priorities
         ];
     }
 
@@ -253,6 +282,17 @@ class Simply_Snippet_Editor {
             }
         }
 
+            
+        $hooks_data = [];
+        if ($edit_mode && $snippet) {
+            // Obtener metadatos del snippet
+            $json_file = SC_STORAGE . "/snippets/{$snippet_name}.json";
+            if (file_exists($json_file)) {
+                $metadata = json_decode(file_get_contents($json_file), true) ?: [];
+                $hooks_data = $metadata['hooks'] ?? [];
+            }
+        }
+
         // Retornar array con todas las variables necesarias para la vista
         return [
             'templates' => $templates,
@@ -261,7 +301,9 @@ class Simply_Snippet_Editor {
             'css_code' => $css_code,
             'description' => $description,
             'snippet' => $snippet,
-            'edit_mode' => $edit_mode
+            'edit_mode' => $edit_mode,
+            'hooks_data' => $hooks_data,
+            'critical_hooks' => Simply_Hook_Detector::get_critical_hooks()
         ];
     }
 
