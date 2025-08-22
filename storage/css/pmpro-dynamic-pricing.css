@@ -7,3 +7,16 @@
     cursor: default;
     pointer-events: none;
 }
+
+.pmpro_account-profile-field {
+    margin: 20px 0;
+    padding: 15px;
+    background: #f8f8f8;
+    border-radius: 5px;
+    border-left: 4px solid #2d9cdb;
+}
+
+.pmpro_nextcloud_config_details p {
+    margin: 8px 0;
+    line-height: 1.4;
+}
