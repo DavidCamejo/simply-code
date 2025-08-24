@@ -1,0 +1,20 @@
+{
+    "description": "Monitorear el espacio en Nextcloud y enviar reporte diario",
+    "last_updated": "2025-08-12 02:38:43",
+    "active": false,
+    "hooks": {
+        "wp": {
+            "type": "action",
+            "priority": 10,
+            "accepted_args": 1,
+            "auto_detected": true
+        },
+        "daily_nextcloud_storage_check": {
+            "type": "action",
+            "priority": 10,
+            "accepted_args": 1,
+            "auto_detected": true
+        }
+    },
+    "load_priority": 10
+}

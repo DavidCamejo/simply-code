@@ -1,1 +1,7 @@
-{"description":"Custom Simple Accordion","last_updated":"2025-07-27 18:35:19","active":true}
+{
+    "description": "Custom Simple Accordion",
+    "last_updated": "2025-08-24 20:25:32",
+    "active": true,
+    "hooks": [],
+    "load_priority": 10
+}

@@ -1,1 +1,7 @@
-{"description":"Current year shortcode","last_updated":"2025-07-27 21:00:03","active":true}
+{
+    "description": "Current year shortcode",
+    "last_updated": "2025-08-15 02:55:04",
+    "active": true,
+    "hooks": [],
+    "load_priority": 10
+}

@@ -1,1 +1,7 @@
-{"description":"Back to Top Button","last_updated":"2025-07-27 16:43:03","active":true}
+{
+    "description": "Back to Top Button",
+    "last_updated": "2025-08-15 00:44:46",
+    "active": true,
+    "hooks": [],
+    "load_priority": 10
+}

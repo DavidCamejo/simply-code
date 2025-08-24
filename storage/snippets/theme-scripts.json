@@ -1,1 +1,14 @@
-{"description":"Agregar scripts y estilos en WP","last_updated":"2025-07-27 21:59:51","active":true}
+{
+    "description": "Agregar scripts y estilos en WP",
+    "last_updated": "2025-08-15 00:42:12",
+    "active": true,
+    "hooks": {
+        "wp_enqueue_scripts": {
+            "type": "action",
+            "priority": 10,
+            "accepted_args": 1,
+            "auto_detected": true
+        }
+    },
+    "load_priority": 10
+}

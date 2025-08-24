@@ -1,1 +1,14 @@
-{"description":"Redirect to Homepage after logout","last_updated":"2025-07-27 22:09:39","active":true}
+{
+    "description": "Redirect to Homepage after logout",
+    "last_updated": "2025-08-15 03:24:01",
+    "active": true,
+    "hooks": {
+        "wp_logout": {
+            "type": "action",
+            "priority": 10,
+            "accepted_args": 1,
+            "auto_detected": true
+        }
+    },
+    "load_priority": 10
+}

@@ -1,1 +1,98 @@
-{"description":"Agregar campos din\u00e1micos usando PMPro Register Helper","last_updated":"2025-07-27 22:53:46","active":true}
+{
+    "description": "Agregar campos din\u00e1micos usando PMPro Register Helper",
+    "last_updated": "2025-08-24 17:23:24",
+    "active": true,
+    "hooks": {
+        "admin_notices": {
+            "type": "action",
+            "priority": 10,
+            "accepted_args": 1,
+            "auto_detected": true
+        },
+        "plugins_loaded": {
+            "type": "action",
+            "priority": 25,
+            "accepted_args": 1,
+            "auto_detected": true
+        },
+        "init": {
+            "type": "action",
+            "priority": 20,
+            "accepted_args": 1,
+            "auto_detected": true
+        },
+        "wp_loaded": {
+            "type": "action",
+            "priority": 5,
+            "accepted_args": 1,
+            "auto_detected": true
+        },
+        "wp_enqueue_scripts": {
+            "type": "action",
+            "priority": 30,
+            "accepted_args": 1,
+            "auto_detected": true
+        },
+        "pmpro_checkout_level": {
+            "type": "filter",
+            "priority": 1,
+            "accepted_args": 1,
+            "auto_detected": true
+        },
+        "pmpro_after_checkout_level": {
+            "type": "filter",
+            "priority": 1,
+            "accepted_args": 1,
+            "auto_detected": true
+        },
+        "pmpro_checkout_level_cost_text": {
+            "type": "filter",
+            "priority": 10,
+            "accepted_args": 2,
+            "auto_detected": true
+        },
+        "pmpro_checkout_before_processing": {
+            "type": "action",
+            "priority": 1,
+            "accepted_args": 1,
+            "auto_detected": true
+        },
+        "pmpro_checkout_order": {
+            "type": "filter",
+            "priority": 1,
+            "accepted_args": 1,
+            "auto_detected": true
+        },
+        "pmpro_checkout_before_payment": {
+            "type": "action",
+            "priority": 1,
+            "accepted_args": 1,
+            "auto_detected": true
+        },
+        "pmpro_after_checkout": {
+            "type": "action",
+            "priority": 10,
+            "accepted_args": 2,
+            "auto_detected": true
+        },
+        "pmpro_account_bullets_bottom": {
+            "type": "action",
+            "priority": 10,
+            "accepted_args": 1,
+            "auto_detected": true
+        },
+        "wp_footer": {
+            "type": "action",
+            "priority": 10,
+            "accepted_args": 1,
+            "auto_detected": true
+        },
+        "admin_bar_menu": {
+            "type": "action",
+            "priority": 10,
+            "accepted_args": 1,
+            "auto_detected": true
+        }
+    },
+    "load_priority": 10
+}

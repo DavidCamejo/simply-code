@@ -1,17 +1,16 @@
-document.addEventListener('DOMContentLoaded', function() {
-    // Inicializar accordion
+document.addEventListener('DOMContentLoaded', () => {
     initSimpleAccordion();
-    
+
     function initSimpleAccordion() {
         const accordionHeaders = document.querySelectorAll('.simple-accordion .accordion-header');
         
-        accordionHeaders.forEach(function(header) {
-            header.addEventListener('click', function() {
+        accordionHeaders.forEach(header => {
+            header.addEventListener('click', () => {
                 toggleAccordion(header);
             });
             
             // Accesibilidad: navegación por teclado
-            header.addEventListener('keydown', function(e) {
+            header.addEventListener('keydown', e => {
                 if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
                     toggleAccordion(header);
@@ -19,43 +18,36 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
-    
+
     function toggleAccordion(header) {
         const content = header.nextElementSibling;
         const accordion = header.closest('.simple-accordion');
         const isActive = header.classList.contains('active');
         
-        // Opcional: Cerrar otros accordions (comportamiento de un solo item abierto)
-        // Si quieres permitir múltiples abiertos, comenta estas líneas:
-        accordion.querySelectorAll('.accordion-header').forEach(h => {
-            if (h !== header) {
-                h.classList.remove('active');
-                h.setAttribute('aria-expanded', 'false');
-            }
-        });
-        accordion.querySelectorAll('.accordion-content').forEach(c => {
-            if (c !== content) {
-                c.classList.remove('active');
-            }
-        });
+        // Cerrar otros acordeones si no es la versión de múltiples abiertos
+        if (!accordion.classList.contains('allow-multiple-open')) {
+            accordion.querySelectorAll('.accordion-header').forEach(h => {
+                if (h !== header && h.classList.contains('active')) {
+                    h.classList.remove('active');
+                    h.setAttribute('aria-expanded', 'false');
+                    h.nextElementSibling.classList.remove('active');
+                }
+            });
+        }
         
-        // Toggle del accordion actual
-        if (isActive) {
-            header.classList.remove('active');
-            content.classList.remove('active');
-            header.setAttribute('aria-expanded', 'false');
-        } else {
-            header.classList.add('active');
-            content.classList.add('active');
-            header.setAttribute('aria-expanded', 'true');
-            
-            // Smooth scroll al accordion abierto (opcional)
-            setTimeout(() => {
-                header.scrollIntoView({ 
-                    behavior: 'smooth', 
-                    block: 'nearest' 
+        // Toggle del acordeón actual
+        header.classList.toggle('active');
+        content.classList.toggle('active');
+        header.setAttribute('aria-expanded', !isActive);
+
+        // Scroll suave al acordeón abierto
+        if (!isActive) {
+            content.addEventListener('transitionend', () => {
+                header.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'nearest'
                 });
-            }, 300);
+            }, { once: true });
         }
     }
 });

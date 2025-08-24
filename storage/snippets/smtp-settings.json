@@ -1,1 +1,14 @@
-{"description":"Configure SMTP settings","last_updated":"2025-07-27 22:52:08","active":true}
+{
+    "description": "Configure SMTP settings",
+    "last_updated": "2025-08-15 03:24:55",
+    "active": true,
+    "hooks": {
+        "phpmailer_init": {
+            "type": "action",
+            "priority": 10,
+            "accepted_args": 1,
+            "auto_detected": true
+        }
+    },
+    "load_priority": 10
+}

@@ -1,1 +1,14 @@
-{"description":"Remove WP logo from login page","last_updated":"2025-07-27 21:44:16","active":true}
+{
+    "description": "Remove WP logo from login page",
+    "last_updated": "2025-08-15 03:21:27",
+    "active": true,
+    "hooks": {
+        "login_head": {
+            "type": "action",
+            "priority": 10,
+            "accepted_args": 1,
+            "auto_detected": true
+        }
+    },
+    "load_priority": 10
+}
