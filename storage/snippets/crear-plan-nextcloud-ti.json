@@ -1,0 +1,7 @@
+{
+    "description": "Responder a solicitud de plan Nextcloud TI integrada con pricing din\u00e1mico",
+    "last_updated": "2025-08-25 00:50:51",
+    "active": true,
+    "hooks": [],
+    "load_priority": 10
+}
