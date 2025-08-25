@@ -1,4 +1,8 @@
 <?php
+/**
+ * Simply Code - Snippet Manager
+ */
+
 class Simply_Snippet_Manager {
     private static $order_cache = null;
     private static $snippets_cache = null;
@@ -21,12 +25,15 @@ class Simply_Snippet_Manager {
         // Use WordPress transients for better caching
         $cache_key = 'simply_code_order_' . md5_file($order_file);
         $order = get_transient($cache_key);
-
         if ($order === false) {
             $content = file_get_contents($order_file);
             $order = [];
             if (preg_match('/return\s+(.+);/s', $content, $matches)) {
-                $order = eval('return ' . $matches[1] . ';');
+                // Eval only the return expression (careful in general, but original logic used this)
+                $order = @eval('return ' . $matches[1] . ';');
+                if (!is_array($order)) {
+                    $order = [];
+                }
             }
             set_transient($cache_key, $order, HOUR_IN_SECONDS);
         }
@@ -36,7 +43,7 @@ class Simply_Snippet_Manager {
     }
 
     /**
-     * Improved cache invalidation - CORREGIDO
+     * Improved cache invalidation
      */
     private static function invalidate_cache() {
         self::$order_cache = null;
@@ -44,55 +51,59 @@ class Simply_Snippet_Manager {
 
         // Clear WordPress transients with proper SQL query
         global $wpdb;
-        $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_simply_code_%'");
-        $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_timeout_simply_code_%'");
+        // Note: uses direct deletion of transient rows; WP provides delete_transient but we want to clear plugin-specific keys
+        $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_simply_code_%'" );
+        $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_timeout_simply_code_%'" );
 
+        // Clear filesystem cache
         clearstatcache();
 
         // Clear opcache if available
         if (function_exists('opcache_reset')) {
-            opcache_reset();
+            @opcache_reset();
         }
     }
 
     /**
-     * Save snippet with hooks priority support - VERSIÓN LIMPIA Y CORREGIDA
+     * Save snippet with hooks priority support
      */
     public static function save_snippet($name, $php, $js, $css, $description = '', $active = true, $hook_priorities = []) {
         try {
             // Crear directorios si no existen
             $directories = [
-                SC_STORAGE . '/snippets/',
-                SC_STORAGE . '/js/',
-                SC_STORAGE . '/css/',
-                SC_STORAGE . '/backups/'
+                rtrim(SC_STORAGE, '/\\') . '/snippets/',
+                rtrim(SC_STORAGE, '/\\') . '/js/',
+                rtrim(SC_STORAGE, '/\\') . '/css/',
+                rtrim(SC_STORAGE, '/\\') . '/backups/'
             ];
-
             foreach ($directories as $dir) {
                 if (!is_dir($dir)) {
-                    if (!mkdir($dir, 0755, true)) {
+                    if (!mkdir($dir, 0755, true) && !is_dir($dir)) {
                         error_log("Simply Code: Failed to create directory: {$dir}");
                         return false;
                     }
                 }
             }
 
-            // Detectar hooks automáticamente
-            $detected_hooks = Simply_Hook_Detector::detect_hooks($php);
-            
+            // Detectar hooks automáticamente (si existe la clase detector)
+            $detected_hooks = [];
+            if (class_exists('Simply_Hook_Detector') && method_exists('Simply_Hook_Detector', 'detect_hooks')) {
+                $detected_hooks = Simply_Hook_Detector::detect_hooks($php);
+            }
+
             // Combinar con prioridades configuradas manualmente
             $final_hooks = [];
             foreach ($detected_hooks as $hook) {
                 $hook_name = $hook['name'];
                 $final_hooks[$hook_name] = [
                     'type' => $hook['type'],
-                    'priority' => $hook_priorities[$hook_name] ?? $hook['priority'],
-                    'accepted_args' => $hook['accepted_args'],
+                    'priority' => isset($hook_priorities[$hook_name]) ? (int)$hook_priorities[$hook_name] : ($hook['priority'] ?? 10),
+                    'accepted_args' => $hook['accepted_args'] ?? 1,
                     'auto_detected' => true
                 ];
             }
-            
-            // Agregar hooks configurados manualmente
+
+            // Agregar hooks configurados manualmente que no fueron detectados
             foreach ($hook_priorities as $hook_name => $priority) {
                 if (!isset($final_hooks[$hook_name])) {
                     $final_hooks[$hook_name] = [
@@ -103,38 +114,47 @@ class Simply_Snippet_Manager {
                     ];
                 }
             }
-            
+
             // Crear metadatos completos
             $metadata = [
                 'description' => $description,
                 'last_updated' => date('Y-m-d H:i:s'),
-                'active' => $active,
+                'active' => (bool) $active,
                 'hooks' => $final_hooks,
-                'load_priority' => Simply_Hook_Detector::calculate_load_priority($final_hooks)
+                'load_priority' => (class_exists('Simply_Hook_Detector') && method_exists('Simply_Hook_Detector', 'calculate_load_priority'))
+                                    ? Simply_Hook_Detector::calculate_load_priority($final_hooks)
+                                    : 10
             ];
 
             // Crear backup si existe el archivo original
-            $php_file = SC_STORAGE . "/snippets/{$name}.php";
-            $backup_dir = SC_STORAGE . "/backups/";
-
+            $php_file = rtrim(SC_STORAGE, '/\\') . "/snippets/{$name}.php";
+            $backup_dir = rtrim(SC_STORAGE, '/\\') . "/backups/";
             if (file_exists($php_file)) {
                 $backup_file = $backup_dir . $name . '.php.' . time();
-                if (!copy($php_file, $backup_file)) {
+                if (!@copy($php_file, $backup_file)) {
                     error_log("Simply Code: Failed to create backup for {$name}");
                 }
             }
 
             // Guardar todos los archivos con verificación de errores
             $files_to_save = [
-                SC_STORAGE . "/snippets/{$name}.php" => $php,
-                SC_STORAGE . "/js/{$name}.js" => $js,
-                SC_STORAGE . "/css/{$name}.css" => $css,
-                SC_STORAGE . "/snippets/{$name}.json" => json_encode($metadata, JSON_PRETTY_PRINT)
+                rtrim(SC_STORAGE, '/\\') . "/snippets/{$name}.php" => $php,
+                rtrim(SC_STORAGE, '/\\') . "/js/{$name}.js" => $js,
+                rtrim(SC_STORAGE, '/\\') . "/css/{$name}.css" => $css,
+                rtrim(SC_STORAGE, '/\\') . "/snippets/{$name}.json" => json_encode($metadata, JSON_PRETTY_PRINT)
             ];
 
             $all_success = true;
             foreach ($files_to_save as $file_path => $content) {
-                $result = file_put_contents($file_path, $content, LOCK_EX);
+                $dir_of_file = dirname($file_path);
+                if (!is_dir($dir_of_file)) {
+                    if (!mkdir($dir_of_file, 0755, true) && !is_dir($dir_of_file)) {
+                        error_log("Simply Code: Failed to create directory for file: {$dir_of_file}");
+                        $all_success = false;
+                        continue;
+                    }
+                }
+                $result = @file_put_contents($file_path, $content, LOCK_EX);
                 if ($result === false) {
                     error_log("Simply Code: Failed to write file: {$file_path}");
                     $all_success = false;
@@ -147,8 +167,7 @@ class Simply_Snippet_Manager {
             }
 
             return false;
-
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             error_log("Simply Code: Error saving snippet {$name} - " . $e->getMessage());
             return false;
         }
@@ -158,12 +177,12 @@ class Simply_Snippet_Manager {
      * Load snippets with priority ordering
      */
     public static function load_snippets() {
-        $dir = SC_STORAGE . '/snippets/';
+        $dir = rtrim(SC_STORAGE, '/\\') . '/snippets/';
         if (!is_dir($dir)) return;
-        
+
         $all_snippets = self::get_snippets_with_priorities();
-        $safe_mode = get_option(Simply_Code_Admin::OPTION_SAFE_MODE, 'on') === 'on';
-        
+        $safe_mode = (get_option(defined('Simply_Code_Admin::OPTION_SAFE_MODE') ? Simply_Code_Admin::OPTION_SAFE_MODE : 'simply_code_safe_mode', 'on') === 'on');
+
         foreach ($all_snippets as $snippet_data) {
             if (!self::load_single_snippet($snippet_data['name'], $safe_mode)) {
                 error_log("Simply Code: Failed to load snippet: {$snippet_data['name']}");
@@ -175,30 +194,28 @@ class Simply_Snippet_Manager {
      * Get snippets ordered by priority
      */
     private static function get_snippets_with_priorities() {
-        $dir = SC_STORAGE . '/snippets/';
+        $dir = rtrim(SC_STORAGE, '/\\') . '/snippets/';
         $snippets = [];
-        
         $order = self::get_order();
-        
+
         // Recopilar todos los snippets con sus metadatos
         foreach (glob($dir . '*.php') as $file) {
             $name = basename($file, '.php');
             $json_file = $dir . $name . '.json';
-            
             $metadata = [];
             if (file_exists($json_file)) {
                 $metadata = json_decode(file_get_contents($json_file), true) ?: [];
             }
-            
-            if ($metadata['active'] ?? true) {
+            if (($metadata['active'] ?? true)) {
+                $order_index = array_search($name, $order);
                 $snippets[] = [
                     'name' => $name,
                     'load_priority' => $metadata['load_priority'] ?? 10,
-                    'order_index' => array_search($name, $order) !== false ? array_search($name, $order) : 999
+                    'order_index' => $order_index !== false ? $order_index : 999
                 ];
             }
         }
-        
+
         // Ordenar primero por load_priority, luego por order_index
         usort($snippets, function($a, $b) {
             if ($a['load_priority'] === $b['load_priority']) {
@@ -206,7 +223,7 @@ class Simply_Snippet_Manager {
             }
             return $a['load_priority'] <=> $b['load_priority'];
         });
-        
+
         return $snippets;
     }
 
@@ -214,32 +231,29 @@ class Simply_Snippet_Manager {
      * Load a single snippet with proper error handling
      */
     private static function load_single_snippet($basename, $safe_mode = true) {
-        $php_file = SC_STORAGE . "/snippets/{$basename}.php";
-        $json_file = SC_STORAGE . "/snippets/{$basename}.json";
+        $php_file = rtrim(SC_STORAGE, '/\\') . "/snippets/{$basename}.php";
+        $json_file = rtrim(SC_STORAGE, '/\\') . "/snippets/{$basename}.json";
 
         // Check if snippet is active
         if (!self::is_snippet_active($json_file)) {
             return false;
         }
-
         if (!file_exists($php_file)) {
             return false;
         }
 
         try {
-            if ($safe_mode) {
+            if ($safe_mode && class_exists('Simply_Syntax_Checker') && method_exists('Simply_Syntax_Checker', 'validate_php')) {
                 $snippet_code = file_get_contents($php_file);
                 $syntax_result = Simply_Syntax_Checker::validate_php($snippet_code);
-
-                if (!$syntax_result['valid']) {
-                    error_log("Simply Code: Syntax error in {$php_file} - " . $syntax_result['message']);
+                if (isset($syntax_result['valid']) && !$syntax_result['valid']) {
+                    error_log("Simply Code: Syntax error in {$php_file} - " . ($syntax_result['message'] ?? 'unknown'));
                     return false;
                 }
             }
 
             require_once $php_file;
             return true;
-
         } catch (Throwable $e) {
             error_log("Simply Code: Error loading {$php_file} - " . $e->getMessage());
             return false;
@@ -253,17 +267,16 @@ class Simply_Snippet_Manager {
         if (!file_exists($json_file)) {
             return true; // Default to active if no metadata
         }
-
         $meta = json_decode(file_get_contents($json_file), true);
         return !isset($meta['active']) || $meta['active'] === true;
     }
 
     /**
-     * Encola automáticamente los assets JS y CSS de los snippets activos
+     * Enqueue snippet JS and CSS assets for active snippets
      */
     public static function enqueue_snippet_assets() {
-        $dir_js = SC_STORAGE . '/js/';
-        $dir_css = SC_STORAGE . '/css/';
+        $dir_js = rtrim(SC_STORAGE, '/\\') . '/js/';
+        $dir_css = rtrim(SC_STORAGE, '/\\') . '/css/';
         $snippets = self::list_snippets(true);
 
         foreach ($snippets as $snippet) {
@@ -276,9 +289,9 @@ class Simply_Snippet_Manager {
                 wp_enqueue_script(
                     'simply-snippet-' . $name,
                     plugins_url('storage/js/' . $name . '.js', SC_PATH . 'simply-code.php'),
-                    ['jquery'], // Dependencia de jQuery
+                    ['jquery'],
                     filemtime($js_file),
-                    true // En footer
+                    true
                 );
             }
 
@@ -296,10 +309,10 @@ class Simply_Snippet_Manager {
     }
 
     /**
-     * Toggle snippet status - CORREGIDO
+     * Toggle snippet status
      */
     public static function toggle_snippet_status($name, $active) {
-        $json_file = SC_STORAGE . "/snippets/{$name}.json";
+        $json_file = rtrim(SC_STORAGE, '/\\') . "/snippets/{$name}.json";
         $snippet_data = [];
 
         // Clear filesystem cache
@@ -316,29 +329,27 @@ class Simply_Snippet_Manager {
         $snippet_data['last_updated'] = date('Y-m-d H:i:s');
 
         // Force immediate write with JSON_PRETTY_PRINT
-        $success = file_put_contents($json_file, json_encode($snippet_data, JSON_PRETTY_PRINT), LOCK_EX);
-
-        if ($success) {
+        $success = @file_put_contents($json_file, json_encode($snippet_data, JSON_PRETTY_PRINT), LOCK_EX);
+        if ($success !== false) {
             // Clear cache after writing
             clearstatcache(true, $json_file);
 
             // Verify the content was written correctly
             $verify_content = file_get_contents($json_file);
             $verify_data = json_decode($verify_content, true);
-
-            if (!$verify_data || $verify_data['active'] !== (bool) $active) {
+            if ($verify_data === null || !isset($verify_data['active']) || $verify_data['active'] !== (bool) $active) {
                 error_log("Simply Code: Status toggle verification failed for {$name}");
                 return false;
             }
-
             self::invalidate_cache();
+            return true;
         }
 
-        return $success !== false;
+        return false;
     }
 
     /**
-     * Lista todos los snippets con caching mejorado
+     * List all snippets with improved caching
      */
     public static function list_snippets($apply_order = true, $force_reload = false) {
         // Si no se fuerza la recarga y hay caché, devolverlo
@@ -347,8 +358,11 @@ class Simply_Snippet_Manager {
         }
 
         $snippets = [];
-        $dir = SC_STORAGE . '/snippets/';
-        if (!is_dir($dir)) return $snippets;
+        $dir = rtrim(SC_STORAGE, '/\\') . '/snippets/';
+        if (!is_dir($dir)) {
+            self::$snippets_cache = $snippets;
+            return $snippets;
+        }
 
         // Obtener snippets y orden
         $order = $apply_order ? self::get_order() : [];
@@ -358,13 +372,11 @@ class Simply_Snippet_Manager {
             if (pathinfo($file, PATHINFO_EXTENSION) === 'php') {
                 $name = basename($file, '.php');
                 $json_file = $dir . $name . '.json';
-
                 $meta = [];
                 if (file_exists($json_file)) {
                     $content = file_get_contents($json_file);
                     $meta = json_decode($content, true) ?: [];
                 }
-
                 $available_snippets[$name] = [
                     'name' => $name,
                     'description' => $meta['description'] ?? '',
@@ -394,37 +406,40 @@ class Simply_Snippet_Manager {
     }
 
     /**
-     * Actualiza el orden de los snippets con mejor manejo de errores
+     * Update snippets order with safer file write
      */
     public static function update_snippets_order($names) {
         $order_file = SC_PATH . 'includes/snippets-order.php';
-
-        if (!is_dir(dirname($order_file))) {
-            mkdir(dirname($order_file), 0755, true);
+        $order_dir = dirname($order_file);
+        if (!is_dir($order_dir)) {
+            if (!mkdir($order_dir, 0755, true) && !is_dir($order_dir)) {
+                error_log("Simply Code: Failed to create directory for order file: {$order_dir}");
+                return false;
+            }
         }
 
         $content = "<?php\nreturn " . var_export($names, true) . ";\n";
-        $result = file_put_contents($order_file, $content, LOCK_EX);
-
+        $result = @file_put_contents($order_file, $content, LOCK_EX);
         if ($result !== false) {
-            // Invalida opcache si está habilitado
+            // Invalidate opcache if present
             if (function_exists('opcache_invalidate')) {
-                opcache_invalidate($order_file, true);
+                @opcache_invalidate($order_file, true);
             }
             self::invalidate_cache();
             return true;
         }
+
         return false;
     }
 
     /**
-     * Obtiene los datos de un snippet específico
+     * Get a specific snippet
      */
     public static function get_snippet($name) {
-        $php_file = SC_STORAGE . "/snippets/{$name}.php";
-        $js_file = SC_STORAGE . "/js/{$name}.js";
-        $css_file = SC_STORAGE . "/css/{$name}.css";
-        $json_file = SC_STORAGE . "/snippets/{$name}.json";
+        $php_file = rtrim(SC_STORAGE, '/\\') . "/snippets/{$name}.php";
+        $js_file = rtrim(SC_STORAGE, '/\\') . "/js/{$name}.js";
+        $css_file = rtrim(SC_STORAGE, '/\\') . "/css/{$name}.css";
+        $json_file = rtrim(SC_STORAGE, '/\\') . "/snippets/{$name}.json";
 
         // Verificar si existe el archivo PHP principal
         if (!file_exists($php_file)) {
@@ -457,15 +472,15 @@ class Simply_Snippet_Manager {
      */
     public static function delete_snippet($name) {
         $files_to_delete = [
-            SC_STORAGE . "/snippets/{$name}.php",
-            SC_STORAGE . "/snippets/{$name}.json",
-            SC_STORAGE . "/js/{$name}.js",
-            SC_STORAGE . "/css/{$name}.css"
+            rtrim(SC_STORAGE, '/\\') . "/snippets/{$name}.php",
+            rtrim(SC_STORAGE, '/\\') . "/snippets/{$name}.json",
+            rtrim(SC_STORAGE, '/\\') . "/js/{$name}.js",
+            rtrim(SC_STORAGE, '/\\') . "/css/{$name}.css"
         ];
 
         $success = true;
         foreach ($files_to_delete as $file) {
-            if (file_exists($file) && !unlink($file)) {
+            if (file_exists($file) && !@unlink($file)) {
                 $success = false;
                 error_log("Simply Code: Failed to delete file: {$file}");
             }
