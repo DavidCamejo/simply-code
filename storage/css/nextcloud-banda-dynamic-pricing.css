@@ -1,0 +1,909 @@
+/* Dynamic pricing for PMPro CSS - VERSIÓN COMPLETA OPTIMIZADA v2.1 */
+
+/* ====================================================================
+   RESET Y BASE
+   ==================================================================== */
+
+/* Prevenir desbordamiento horizontal global */
+* {
+    box-sizing: border-box !important;
+}
+
+body {
+    overflow-x: hidden !important;
+}
+
+/* ====================================================================
+   ESTILOS GENERALES DEL FORMULARIO
+   ==================================================================== */
+
+#total_price_display {
+    background-color: #edf5f9 !important;
+    border: none !important;
+    font-size: 20px !important;
+    font-weight: 600 !important;
+    cursor: default !important;
+    pointer-events: none !important;
+    color: #2d5a87 !important;
+    text-align: center !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 12px !important;
+    border-radius: 6px !important;
+    box-sizing: border-box !important;
+}
+
+.pmpro_account-profile-field {
+    margin: 20px 0 !important;
+    padding: 15px !important;
+    background: #f8f8f8 !important;
+    border-radius: 5px !important;
+    border-left: 4px solid #2d9cdb !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+}
+
+.pmpro_nextcloud_config_details p {
+    margin: 8px 0 !important;
+    line-height: 1.4 !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+}
+
+.pmpro_nextcloud_config_details h3 {
+    color: #2d5a87 !important;
+    margin-bottom: 15px !important;
+    border-bottom: 2px solid #e0e0e0 !important;
+    padding-bottom: 8px !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+}
+
+/* ====================================================================
+   CONTENEDORES PRINCIPALES - CORRECCIÓN PARA MÓVILES
+   ==================================================================== */
+
+/* Contenedor principal del formulario */
+#pmpro_checkout,
+.pmpro_checkout,
+.pmpro_billing,
+.pmpro_account {
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+}
+
+/* Fieldsets responsive */
+fieldset {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    overflow-x: hidden !important;
+}
+
+fieldset legend {
+    max-width: calc(100% - 20px) !important;
+    padding: 0 10px !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    box-sizing: border-box !important;
+}
+
+/* Campos individuales */
+.pmpro_checkout-field,
+.pmpro_billing-field,
+.pmpro_account-field {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+    margin: 15px 0 !important;
+    padding: 0 !important;
+}
+
+/* ====================================================================
+   SELECTS - OPTIMIZADOS PARA MÓVILES
+   ==================================================================== */
+
+/* Base para todos los selects con flecha única */
+#storage_space, 
+#num_users, 
+#payment_frequency,
+select#num_users,
+select#storage_space,
+select#payment_frequency {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    padding: 12px 40px 12px 15px !important;
+    border: 1px solid #ddd !important;
+    border-radius: 6px !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+    transition: border-color 0.3s ease !important;
+    box-sizing: border-box !important;
+    
+    /* Remover estilos nativos */
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    -ms-appearance: none !important;
+    appearance: none !important;
+    
+    /* Flecha personalizada única */
+    background-color: white !important;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 5'><path fill='%23666' d='m0 0 2 2 2-2z'/></svg>") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 15px center !important;
+    background-size: 12px !important;
+}
+
+/* Selectores con máxima especificidad */
+html body .pmpro_checkout-field select,
+html body .pmpro_billing-field select,
+html body .pmpro_account-field select,
+html body #num_users,
+html body #storage_space,
+html body #payment_frequency,
+body .pmpro_checkout-field select#num_users,
+body .pmpro_billing-field select#num_users,
+body .pmpro_account-field select#num_users {
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    -ms-appearance: none !important;
+    appearance: none !important;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 5'><path fill='%23666' d='m0 0 2 2 2-2z'/></svg>") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 15px center !important;
+    background-size: 12px !important;
+    background-color: #cadbe6 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    border: 1px solid #777 !important;
+}
+
+/* Estados de focus */
+#storage_space:focus, 
+#num_users:focus, 
+#payment_frequency:focus {
+    border-color: #2d9cdb !important;
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(45, 156, 219, 0.1) !important;
+}
+
+/* ====================================================================
+   OPCIONES DEL SELECT
+   ==================================================================== */
+
+#num_users option,
+#storage_space option,
+#payment_frequency option {
+    padding: 10px 15px !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    min-height: 40px !important;
+    line-height: 1.4 !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    -webkit-text-size-adjust: none !important;
+    -moz-text-size-adjust: none !important;
+    -ms-text-size-adjust: none !important;
+    text-size-adjust: none !important;
+}
+
+/* Opciones deshabilitadas */
+#storage_space option:disabled, 
+#num_users option:disabled,
+#payment_frequency option:disabled {
+    color: #999 !important;
+    background-color: #f5f5f5 !important;
+}
+
+/* ====================================================================
+   CAMPO DE SUITE OFIMÁTICA CON BORDE
+   ==================================================================== */
+
+.pmpro_checkout-field-office-suite.bordered-field {
+    border: 1px solid #2d9cdb !important;
+    border-radius: 8px !important;
+    padding: 16px !important;
+    background-color: #f9fbff !important;
+    margin: 20px 0 !important;
+    position: relative !important;
+    overflow-x: hidden !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+.pmpro_checkout-field-office-suite.bordered-field label {
+    font-weight: 600 !important;
+    color: #2d5a87 !important;
+    display: block !important;
+    position: relative !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+/* ====================================================================
+   SISTEMA DE TOOLTIPS
+   ==================================================================== */
+
+.pmpro-tooltip-trigger {
+    color: #2d9cdb !important;
+    cursor: help !important;
+    font-size: 22px !important;
+    vertical-align: top !important;
+    display: inline-block !important;
+    width: 20px !important;
+    height: 20px !important;
+    transition: all 0.2s ease !important;
+    position: relative !important;
+    z-index: 1 !important;
+}
+
+.pmpro-tooltip-trigger:hover {
+    color: #1e6091 !important;
+    transform: scale(1.1) !important;
+}
+
+.pmpro-tooltip {
+    position: absolute !important;
+    background-color: #333 !important;
+    color: white !important;
+    padding: 16px 20px !important;
+    border-radius: 8px !important;
+    font-size: 13px !important;
+    line-height: 1.1 !important;
+    width: 400px !important;
+    max-width: 95vw !important;
+    z-index: 10001 !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2) !important;
+    word-wrap: break-word !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+    white-space: normal !important;
+    text-align: left !important;
+    box-sizing: border-box !important;
+    pointer-events: auto !important;
+    transition: opacity 0.3s ease, visibility 0.3s ease !important;
+}
+
+.pmpro-tooltip p {
+    margin: 0 0 12px 0 !important;
+    padding: 0 !important;
+}
+
+.pmpro-tooltip p:last-child {
+    margin-bottom: 0 !important;
+}
+
+.pmpro-tooltip strong {
+    color: #fff !important;
+    font-weight: 600 !important;
+    display: inline !important;
+}
+
+/* ====================================================================
+   MENSAJES DE ALERTA
+   ==================================================================== */
+
+.pmpro_message {
+    padding: 12px 16px !important;
+    margin: 16px 0 !important;
+    border-radius: 6px !important;
+    font-size: 14px !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+}
+
+.pmpro_message.pmpro_error {
+    background-color: #fdf2f2 !important;
+    border: 1px solid #fecaca !important;
+    color: #dc2626 !important;
+}
+
+/* ====================================================================
+   BREAKPOINT TABLET (768px)
+   ==================================================================== */
+
+@media (max-width: 768px) {
+    /* Contenedor principal más compacto */
+    fieldset {
+        padding: 12px 8px !important;
+    }
+    
+    fieldset legend {
+        font-size: 15px !important;
+        max-width: calc(100% - 16px) !important;
+        padding: 0 8px !important;
+    }
+    
+    .pmpro_checkout-field,
+    .pmpro_billing-field,
+    .pmpro_account-field {
+        margin: 12px 0 !important;
+        padding: 0 5px !important;
+    }
+    
+    /* Selects responsive */
+    #storage_space, 
+    #num_users, 
+    #payment_frequency,
+    select#storage_space,
+    select#num_users,
+    select#payment_frequency {
+        padding: 10px 35px 10px 12px !important;
+        font-size: 14px !important;
+        background-size: 11px !important;
+        background-position: right 12px center !important;
+    }
+    
+    #num_users option,
+    #storage_space option,
+    #payment_frequency option {
+        font-size: 13px !important;
+        padding: 8px 12px !important;
+        min-height: 35px !important;
+        line-height: 1.3 !important;
+    }
+    
+    /* Campo de precio responsive */
+    #total_price_display {
+        font-size: 18px !important;
+        padding: 10px !important;
+    }
+    
+    /* Sección bordered-field responsive */
+    .pmpro_checkout-field-office-suite.bordered-field {
+        padding: 12px !important;
+        margin: 15px 0 !important;
+        border-radius: 6px !important;
+    }
+    
+    .pmpro_checkout-field-office-suite.bordered-field label {
+        font-size: 16px !important;
+        margin-bottom: 8px !important;
+    }
+    
+    /* Tooltips responsive */
+    .pmpro-tooltip {
+        width: 350px !important;
+        max-width: calc(100vw - 20px) !important;
+        font-size: 13px !important;
+        padding: 14px 16px !important;
+        line-height: 1.5 !important;
+    }
+    
+    .pmpro-tooltip-trigger {
+        font-size: 18px !important;
+        width: 18px !important;
+        height: 18px !important;
+        margin-left: 6px !important;
+    }
+}
+
+/* ====================================================================
+   BREAKPOINT MÓVIL (480px)
+   ==================================================================== */
+
+@media (max-width: 480px) {
+    /* Reset completo para móviles */
+    body {
+        overflow-x: hidden !important;
+    }
+    
+    /* Contenedores ultra compactos */
+    fieldset {
+        padding: 8px 5px !important;
+        margin: 0 !important;
+    }
+    
+    fieldset legend {
+        font-size: 14px !important;
+        max-width: calc(100vw - 30px) !important;
+        padding: 0 5px !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+    }
+    
+    .pmpro_checkout-field,
+    .pmpro_billing-field,
+    .pmpro_account-field {
+        margin: 8px 0 !important;
+        padding: 0 2px !important;
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+    }
+    
+    /* Selects móviles */
+    #storage_space, 
+    #num_users, 
+    #payment_frequency,
+    select#storage_space,
+    select#num_users,
+    select#payment_frequency {
+        padding: 8px 30px 8px 10px !important;
+        font-size: 13px !important;
+        background-size: 10px !important;
+        background-position: right 10px center !important;
+        min-height: 40px !important;
+    }
+    
+    #num_users option,
+    #storage_space option,
+    #payment_frequency option {
+        font-size: 12px !important;
+        padding: 6px 10px !important;
+        min-height: 32px !important;
+        line-height: 1.3 !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+    }
+    
+    /* Campo de precio móvil */
+    #total_price_display {
+        font-size: 16px !important;
+        padding: 8px !important;
+        text-align: center !important;
+    }
+    
+    /* Sección bordered-field móvil */
+    .pmpro_checkout-field-office-suite.bordered-field {
+        padding: 8px !important;
+        margin: 10px 0 !important;
+        border-radius: 4px !important;
+        overflow-x: hidden !important;
+        max-width: 100% !important;
+    }
+    
+    .pmpro_checkout-field-office-suite.bordered-field label {
+        font-size: 16px !important;
+        margin-bottom: 6px !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+    }
+    
+    /* Tooltips móviles */
+    .pmpro-tooltip {
+        width: 300px !important;
+        max-width: calc(100vw - 10px) !important;
+        font-size: 12px !important;
+        padding: 12px 14px !important;
+        line-height: 1.4 !important;
+        left: 5px !important;
+        right: 5px !important;
+    }
+    
+    .pmpro-tooltip-trigger {
+        font-size: 16px !important;
+        width: 16px !important;
+        height: 16px !important;
+        margin-left: 4px !important;
+    }
+    
+    /* Labels más compactos */
+    .pmpro_checkout-field label,
+    .pmpro_billing-field label,
+    .pmpro_account-field label {
+        font-size: 13px !important;
+        line-height: 1.3 !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        max-width: 100% !important;
+        margin-bottom: 6px !important;
+    }
+    
+    /* Mensajes de alerta móviles */
+    .pmpro_message {
+        padding: 8px 10px !important;
+        margin: 10px 0 !important;
+        font-size: 12px !important;
+        box-sizing: border-box !important;
+    }
+    
+    /* Profile fields móviles */
+    .pmpro_account-profile-field {
+        margin: 10px 0 !important;
+        padding: 10px !important;
+    }
+}
+
+/* ====================================================================
+   BREAKPOINT PANTALLAS MUY PEQUEÑAS (360px)
+   ==================================================================== */
+
+@media (max-width: 360px) {
+    /* Ultra compacto para pantallas pequeñas */
+    fieldset {
+        padding: 5px 3px !important;
+    }
+    
+    fieldset legend {
+        font-size: 13px !important;
+        max-width: calc(100vw - 20px) !important;
+        padding: 0 3px !important;
+    }
+    
+    .pmpro_checkout-field,
+    .pmpro_billing-field,
+    .pmpro_account-field {
+        padding: 0 1px !important;
+        margin: 6px 0 !important;
+    }
+    
+    /* Selects ultra compactos */
+    #storage_space, 
+    #num_users, 
+    #payment_frequency,
+    select#storage_space,
+    select#num_users,
+    select#payment_frequency {
+        padding: 6px 25px 6px 8px !important;
+        font-size: 12px !important;
+        background-size: 8px !important;
+        background-position: right 8px center !important;
+        min-height: 36px !important;
+    }
+    
+    #num_users option,
+    #storage_space option,
+    #payment_frequency option {
+        font-size: 11px !important;
+        padding: 4px 8px !important;
+        min-height: 28px !important;
+        line-height: 1.2 !important;
+    }
+    
+    /* Campo de precio ultra compacto */
+    #total_price_display {
+        font-size: 14px !important;
+        padding: 6px !important;
+    }
+    
+    /* Sección bordered-field ultra compacta */
+    .pmpro_checkout-field-office-suite.bordered-field {
+        padding: 6px !important;
+        margin: 8px 0 !important;
+    }
+    
+    .pmpro_checkout-field-office-suite.bordered-field label {
+        font-size: 16px !important;
+        margin-bottom: 4px !important;
+    }
+    
+    /* Tooltips ultra pequeños */
+    .pmpro-tooltip {
+        width: 280px !important;
+        max-width: calc(100vw - 5px) !important;
+        font-size: 11px !important;
+        padding: 10px 12px !important;
+        left: 2px !important;
+        right: 2px !important;
+    }
+    
+    .pmpro-tooltip-trigger {
+        font-size: 14px !important;
+        width: 14px !important;
+        height: 14px !important;
+    }
+    
+    /* Labels ultra compactos */
+    .pmpro_checkout-field label,
+    .pmpro_billing-field label,
+    .pmpro_account-field label {
+        font-size: 12px !important;
+        line-height: 1.2 !important;
+        margin-bottom: 4px !important;
+    }
+}
+
+/* ====================================================================
+   PREVENIR INTERFERENCIAS DE NAVEGADORES
+   ==================================================================== */
+
+/* Webkit */
+select#num_users::-ms-expand,
+select#storage_space::-ms-expand,
+select#payment_frequency::-ms-expand {
+    display: none !important;
+}
+
+/* Internet Explorer */
+select#num_users::-ms-dropdown,
+select#storage_space::-ms-dropdown,
+select#payment_frequency::-ms-dropdown {
+    display: none !important;
+}
+
+/* Firefox */
+select#num_users:-moz-focusring,
+select#storage_space:-moz-focusring,
+select#payment_frequency:-moz-focusring {
+    color: transparent !important;
+    text-shadow: 0 0 0 #000 !important;
+}
+
+/* ====================================================================
+   ESTADOS ESPECIALES
+   ==================================================================== */
+
+/* Selects disabled */
+#storage_space:disabled,
+#num_users:disabled,
+#payment_frequency:disabled {
+    background-color: #f5f5f5 !important;
+    color: #999 !important;
+    cursor: not-allowed !important;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 5'><path fill='%23999' d='m0 0 2 2 2-2z'/></svg>") !important;
+}
+
+/* Estados de validación */
+.pmpro_checkout-field.pmpro_error select {
+    border-color: #dc2626 !important;
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.1) !important;
+}
+
+.pmpro_checkout-field.pmpro_error select:focus {
+    border-color: #dc2626 !important;
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2) !important;
+}
+
+/* ====================================================================
+   COMPATIBILIDAD CON TEMAS Y PAGE BUILDERS
+   ==================================================================== */
+
+/* Astra Theme */
+.ast-container .pmpro_checkout-field,
+.ast-container .pmpro_billing-field,
+.ast-container .pmpro_account-field {
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+}
+
+.ast-container select#num_users,
+.ast-container select#storage_space,
+.ast-container select#payment_frequency {
+    width: 100% !important;
+    max-width: 100% !important;
+    -webkit-appearance: none !important;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 5'><path fill='%23666' d='m0 0 2 2 2-2z'/></svg>") !important;
+}
+
+/* Elementor */
+.elementor .pmpro_checkout-field,
+.elementor .pmpro_billing-field,
+.elementor .pmpro_account-field,
+.elementor-widget .pmpro_checkout-field {
+    max-width: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+}
+
+.elementor select#num_users,
+.elementor select#storage_space,
+.elementor select#payment_frequency {
+    width: 100% !important;
+    max-width: 100% !important;
+    -webkit-appearance: none !important;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 5'><path fill='%23666' d='m0 0 2 2 2-2z'/></svg>") !important;
+}
+
+/* GeneratePress */
+.site-content .pmpro_checkout-field,
+.entry-content .pmpro_checkout-field,
+.main-content .pmpro_checkout-field {
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+}
+
+.site-content select#num_users,
+.site-content select#storage_space,
+.site-content select#payment_frequency {
+    width: 100% !important;
+    max-width: 100% !important;
+    -webkit-appearance: none !important;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 5'><path fill='%23666' d='m0 0 2 2 2-2z'/></svg>") !important;
+}
+
+/* Divi Theme */
+.et_pb_row .pmpro_checkout-field,
+.et_pb_column .pmpro_checkout-field {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+}
+
+/* Avada Theme */
+.fusion-builder-row .pmpro_checkout-field,
+.fusion-layout-column .pmpro_checkout-field {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+}
+
+/* ====================================================================
+   LIMPIAR ESTILOS CONFLICTIVOS
+   ==================================================================== */
+
+/* Remover pseudo-elementos que puedan crear flechas adicionales */
+select#num_users::after,
+select#num_users::before,
+select#storage_space::after,
+select#storage_space::before,
+select#payment_frequency::after,
+select#payment_frequency::before {
+    display: none !important;
+    content: none !important;
+}
+
+/* Background consistente */
+select#num_users,
+select#storage_space,
+select#payment_frequency {
+    background-attachment: scroll !important;
+    background-clip: padding-box !important;
+    background-origin: padding-box !important;
+}
+
+/* ====================================================================
+   UTILITIES Y DEBUG
+   ==================================================================== */
+
+/* Clase utility para forzar responsive */
+.pmpro-force-responsive {
+    max-width: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+}
+
+/* Debug clase (remover en producción) */
+.pmpro-debug-mobile {
+    outline: 2px solid red !important;
+}
+
+/* Prevenir zoom en iOS */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+    select#num_users,
+    select#storage_space,
+    select#payment_frequency {
+        font-size: 16px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    /* Mantener 16px mínimo en iOS para prevenir zoom */
+    select#num_users,
+    select#storage_space,
+    select#payment_frequency {
+        font-size: 16px !important;
+    }
+}
+
+/* ====================================================================
+   ACCESIBILIDAD
+   ==================================================================== */
+
+/* Focus visible mejorado */
+#storage_space:focus-visible,
+#num_users:focus-visible,
+#payment_frequency:focus-visible {
+    outline: 2px solid #2d9cdb !important;
+    outline-offset: 2px !important;
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+    .pmpro-tooltip {
+        background-color: #000 !important;
+        border: 2px solid #fff !important;
+    }
+    
+    .pmpro_checkout-field-office-suite.bordered-field {
+        border-width: 2px !important;
+        border-color: #000 !important;
+    }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .pmpro-tooltip-trigger {
+        transition: none !important;
+    }
+    
+    .pmpro-tooltip {
+        transition: none !important;
+    }
+}
+
+/* ====================================================================
+   ESTILOS PARA PRORRATEO (UPGRADES)
+   ==================================================================== */
+
+/* Estado de prorrateo en el campo de precio */
+#total_price_display.prorated-price {
+    background-color: #fff8e1 !important;
+    border: 2px solid #ffd54f !important;
+    color: #8c6b08 !important;
+    font-weight: 700 !important;
+}
+
+/* Label para precio prorrateado */
+.pmpro_checkout-field-price-display.prorated-label label {
+    color: #8c6b08 !important;
+    font-weight: 700 !important;
+}
+
+/* Mensaje de información de prorrateo */
+.pmpro-prorated-notice {
+    background-color: #e8f5e8 !important;
+    border: 1px solid #4caf50 !important;
+    border-radius: 6px !important;
+    padding: 12px 16px !important;
+    margin: 12px 0 !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+    color: #2e7d32 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+.pmpro-prorated-notice p {
+    margin: 0 0 8px 0 !important;
+    padding: 0 !important;
+}
+
+.pmpro-prorated-notice p:last-child {
+    margin-bottom: 0 !important;
+}
+
+/* Icono de información */
+.pmpro-prorated-notice::before {
+    content: "ℹ️";
+    margin-right: 8px;
+    font-size: 16px;
+}
+
+/* Estilos para precio prorrateado */
+.prorated-price {
+  color: #b33;               /* rojo oscuro para resaltar */
+  font-weight: 700;
+  transition: color 0.15s;
+}
+
+.pmpro-prorated-notice {
+  border-left: 4px solid #b33;
+  background: #fff5f5;
+  padding: 10px;
+  margin-top: 8px;
+  border-radius: 4px;
+  color: #333;
+  font-size: 0.95em;
+}
+
+.prorated-label {
+  color: #b33;
+  font-weight: 600;
+}
+
+/* Responsive para mensajes de prorrateo */
+@media (max-width: 768px) {
+    .pmpro-prorated-notice {
+        padding: 10px 12px !important;
+        font-size: 13px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .pmpro-prorated-notice {
+        padding: 8px 10px !important;
+        font-size: 12px !important;
+    }
+}
