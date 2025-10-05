@@ -483,12 +483,14 @@
         return sanitized;
     }
 
+    // Modificar calculateProration para manejo de errores del spinner
     function calculateProration(newTotalPrice, callback) {
         if (!pricingData.hasActiveMembership || !pricingData.current_subscription_data) {
             log('debug', 'No active membership for proration', {
                 hasActiveMembership: pricingData?.hasActiveMembership,
                 hasSubscriptionData: !!pricingData?.current_subscription_data
             });
+            hideSpinner(); // Asegurar que el spinner se oculte
             callback(null);
             return;
         }
@@ -502,6 +504,7 @@
             log('warn', 'Missing field values for proration calculation', {
                 storageSpace, numUsers, paymentFrequency
             });
+            hideSpinner(); // Asegurar que el spinner se oculte
             callback(null);
             return;
         }
@@ -537,6 +540,7 @@
 
                     if (!response) {
                         log('warn', 'Empty AJAX response');
+                        hideSpinner(); // Ocultar spinner en caso de error
                         callback(null);
                         return;
                     }
@@ -547,6 +551,7 @@
                         
                         if (!data || typeof data !== 'object') {
                             log('warn', 'Invalid data structure in response', { response });
+                            hideSpinner(); // Ocultar spinner en caso de error
                             callback(null);
                             return;
                         }
@@ -588,6 +593,7 @@
                         error: error.message,
                         stack: error.stack
                     });
+                    hideSpinner(); // Ocultar spinner en caso de error
                     callback(null);
                 }
             },
@@ -629,8 +635,53 @@
                     newFrequency: 'monthly',
                     raw: null
                 });
+            },
+            complete: function() {
+                // Asegurar que el spinner se oculte siempre al completar la llamada AJAX
+                hideSpinner();
             }
         });
+    }
+
+    // ====
+    // SPINNER FUNCTIONS
+    // ====
+
+    function showSpinner() {
+        // Crear spinner si no existe
+        let $spinner = $('#banda-pricing-spinner');
+        if ($spinner.length === 0) {
+            const spinnerHtml = `
+                <div id="banda-pricing-spinner" style="display: none; text-align: center; margin: 4px 0;">
+                    <div style="display: inline-block; width: 12px; height: 12px; border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; animation: banda-spin 1s linear infinite;"></div>
+                    <span style="margin-left: 10px; font-size: 0.7em; color: #666;">Calculando...</span>
+                </div>
+                <style>
+                    @keyframes banda-spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
+                </style>
+            `;
+            const $priceField = $(BANDA_CONFIG.selectors.priceDisplay).closest('.pmpro_checkout-field-price-display');
+            if ($priceField.length > 0) {
+                $priceField.after(spinnerHtml);
+            } else {
+                $('.pmpro_form').prepend(spinnerHtml);
+            }
+            $spinner = $('#banda-pricing-spinner');
+        }
+        
+        $spinner.fadeIn(200);
+        log('debug', 'Spinner shown');
+    }
+
+    function hideSpinner() {
+        const $spinner = $('#banda-pricing-spinner');
+        if ($spinner.length > 0) {
+            $spinner.fadeOut(200);
+            log('debug', 'Spinner hidden');
+        }
     }
 
     // ====
@@ -741,7 +792,7 @@
 
             if (prorationData.isUpgrade && amountDueNow !== null && amountDueNow >= 0) {
                 noticeContent = `
-                    <h4 style="margin: 0 0 12px 0; color: #0c5460;">🚀 Upgrade da configuração</h4>
+                    <h4 style="margin: 0 0 10px 0; color: #0c5460;">🚀 Upgrade da configuração</h4>
                     <div style="margin-bottom: 10px;">
                         <strong>Preço da nova configuração:</strong> R$ ${formatPrice(newTotalPrice)}
                     </div>
@@ -762,13 +813,13 @@
                             <strong style="color: #0c5460;">Valor a pagar agora: R$ ${formatPrice(displayPrice)}</strong>
                         </div>
                     </div>
-                    <div style="font-size: 0.85em; color: #6c757d; margin-top: 10px;">
+                    <div style="font-size: 0.85em; color: #565D63; margin-top: 10px;">
                         💡 Você paga apenas a diferença prorratada agora.<br/>➡️ O valor integral da nova configuração só será cobrado no próximo ciclo.
                     </div>
                 `;
             } else if (prorationData.isUpgrade) {
                 noticeContent = `
-                    <h4 style="margin: 0 0 12px 0; color: #0c5460;">🚀 Upgrade da configuração</h4>
+                    <h4 style="margin: 0 0 10px 0; color: #0c5460;">🚀 Upgrade da configuração</h4>
                     <div style="margin-bottom: 10px;">
                         <strong>Preço da nova configuração:</strong> R$ ${formatPrice(newTotalPrice)}
                     </div>
@@ -794,7 +845,7 @@
                 `;
             } else {
                 noticeContent = `
-                    <h4 style="margin: 0 0 12px 0; color: #0c5460;">📋 Detalhes da sua configuração</h4>
+                    <h4 style="margin: 0 0 10px 0; color: #0c5460;">📋 Detalhes da sua configuração</h4>
                     <div style="margin-bottom: 10px;">
                         <strong>Preço total da configuração:</strong> R$ ${formatPrice(newTotalPrice)}
                     </div>
@@ -815,7 +866,7 @@
             }
 
             const noticeHtml = `
-                <div class="${BANDA_CONFIG.classes.proratedNotice}" style="background: #e8f4fd; border: 1px solid #bee5eb; padding: 15px; border-radius: 8px; margin: 15px 0; font-size: 0.9em;">
+                <div class="${BANDA_CONFIG.classes.proratedNotice}" style="background: #e8f4fd; border: 1px solid #bee5eb; padding: 10px; border-radius: 8px; margin: 10px 0; font-size: 0.9em;">
                     ${noticeContent}
                 </div>
             `;
@@ -1060,6 +1111,7 @@
     // MANEJO DE EVENTOS
     // ====
 
+    // También actualizar la función handleFieldChange para mostrar el spinner inmediatamente
     function handleFieldChange() {
         if (isCalculating) {
             log('debug', 'Calculation already in progress, skipping');
@@ -1078,12 +1130,15 @@
 
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(function() {
+            showSpinner(); // Mostrar spinner inmediatamente al iniciar el debounce
             performPriceCalculation();
         }, BANDA_CONFIG.debounceDelay);
     }
 
+    // Modificar performPriceCalculation para incluir spinner
     function performPriceCalculation() {
         isCalculating = true;
+        showSpinner(); // Mostrar spinner al inicio del cálculo
 
         const storageSpace = $(BANDA_CONFIG.selectors.storageField).val();
         const numUsers = $(BANDA_CONFIG.selectors.usersField).val();
@@ -1124,6 +1179,7 @@
                     currentProrationData = prorationData;
                     updatePriceDisplay(newPrice, prorationData);
                     isCalculating = false;
+                    hideSpinner(); // Ocultar spinner al finalizar
                 });
             } else {
                 log('debug', 'Skipping proration calculation - conditions not met');
@@ -1152,11 +1208,13 @@
                     updatePriceDisplay(newPrice, null);
                 }
                 isCalculating = false;
+                hideSpinner(); // Ocultar spinner al finalizar
             }
         } else {
             log('debug', 'No pricing data available, updating display without proration');
             updatePriceDisplay(newPrice, null);
             isCalculating = false;
+            hideSpinner(); // Ocultar spinner al finalizar
         }
     }
 
