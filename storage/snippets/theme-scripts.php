@@ -205,14 +205,14 @@ function banda_localize_pricing_script_improved() {
             // Obtener fecha de próximo pago
             if (function_exists('pmpro_getMembershipLevelForUser')) {
                 $level = pmpro_getMembershipLevelForUser($user_id);
-				// Obtener fecha de próximo pago usando la nueva función
-				if (function_exists('nextcloud_banda_get_next_payment_info')) {
-					$level = pmpro_getMembershipLevelForUser($user_id);
-					$cycle_info = nextcloud_banda_get_next_payment_info($user_id, $level);
-					if ($cycle_info && !empty($cycle_info['next_payment_ts'])) {
-						$next_payment_date = date('c', $cycle_info['next_payment_ts']);
-					}
-				}
+                                // Obtener fecha de próximo pago usando la nueva función
+                                if (function_exists('nextcloud_banda_get_next_payment_info')) {
+                                        $level = pmpro_getMembershipLevelForUser($user_id);
+                                        $cycle_info = nextcloud_banda_get_next_payment_info($user_id, $level);
+                                        if ($cycle_info && !empty($cycle_info['next_payment_ts'])) {
+                                                $next_payment_date = date('c', $cycle_info['next_payment_ts']);
+                                        }
+                                }
             }
         }
     }
@@ -335,129 +335,7 @@ function banda_theme_log($message, $context = []) {
         error_log($log_message);
     }
 }
-/*
-// Hook AJAX para cálculo de prorrateo (si no existe en el plugin principal)
-if (!has_action('wp_ajax_nextcloud_banda_calculate_proration')) {
-    add_action('wp_ajax_nextcloud_banda_calculate_proration', 'banda_handle_proration_ajax');
-    add_action('wp_ajax_nopriv_nextcloud_banda_calculate_proration', 'banda_handle_proration_ajax');
-}
 
-function banda_handle_proration_ajax() {
-    // Verificar nonce
-    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'nextcloud_banda_nonce')) {
-        wp_die('Nonce verification failed');
-    }
-
-    // Verificar usuario logueado
-    if (!is_user_logged_in()) {
-        wp_send_json_error(['message' => 'User not logged in']);
-        return;
-    }
-
-    $user_id = get_current_user_id();
-    $storage_space = sanitize_text_field($_POST['storage_space'] ?? '1tb');
-    $num_users = max(2, min(20, intval($_POST['num_users'] ?? 2)));
-    $payment_frequency = sanitize_text_field($_POST['payment_frequency'] ?? 'monthly');
-
-    // Obtener datos de suscripción actual
-    if (!function_exists('pmpro_getMembershipLevelForUser')) {
-        wp_send_json_error(['message' => 'PMPro functions not available']);
-        return;
-    }
-
-    $current_level = pmpro_getMembershipLevelForUser($user_id);
-    if (!$current_level) {
-        wp_send_json_error(['message' => 'No active membership found']);
-        return;
-    }
-
-    // Obtener configuración actual
-    $config_json = get_user_meta($user_id, 'nextcloud_banda_config', true);
-    $current_config = [];
-    if (!empty($config_json)) {
-        $config = json_decode($config_json, true);
-        if (is_array($config) && json_last_error() === JSON_ERROR_NONE) {
-            $current_config = $config;
-        }
-    }
-
-    $current_storage = $current_config['storage_space'] ?? '1tb';
-    $current_users = $current_config['num_users'] ?? 2;
-    $current_frequency = $current_config['payment_frequency'] ?? 'monthly';
-
-    // Verificar si es upgrade
-    $current_storage_tb = intval(str_replace('tb', '', strtolower($current_storage)));
-    $new_storage_tb = intval(str_replace('tb', '', strtolower($storage_space)));
-    
-    $frequency_order = [
-        'monthly' => 1, 'semiannual' => 2, 'annual' => 3, 'biennial' => 4,
-        'triennial' => 5, 'quadrennial' => 6, 'quinquennial' => 7
-    ];
-    
-    $current_freq_order = $frequency_order[$current_frequency] ?? 1;
-    $new_freq_order = $frequency_order[$payment_frequency] ?? 1;
-    
-    $is_upgrade = (
-        $new_storage_tb > $current_storage_tb ||
-        $num_users > $current_users ||
-        $new_freq_order > $current_freq_order
-    );
-
-    if (!$is_upgrade) {
-        wp_send_json_success([
-            'is_upgrade' => false,
-            'message' => 'Not an upgrade'
-        ]);
-        return;
-    }
-
-    // Calcular prorrateo básico
-    $current_amount = (float)$current_level->initial_payment;
-    
-    // Calcular nuevo precio (simplificado)
-    $base_price = NEXTCLOUD_BANDA_BASE_PRICE;
-    $price_per_tb = 70.00;
-    $price_per_user = 10.00;
-    
-    $additional_tb = max(0, $new_storage_tb - 1);
-    $additional_users = max(0, $num_users - 2);
-    
-    $storage_price = $base_price + ($price_per_tb * $additional_tb);
-    $user_price = $price_per_user * $additional_users;
-    $combined_price = $storage_price + $user_price;
-    
-    $frequency_multipliers = [
-        'monthly' => 1.0, 'semiannual' => 5.7, 'annual' => 10.8, 'biennial' => 20.4,
-        'triennial' => 28.8, 'quadrennial' => 36.0, 'quinquennial' => 42.0
-    ];
-    
-    $multiplier = $frequency_multipliers[$payment_frequency] ?? 1.0;
-    $new_total_price = ceil($combined_price * $multiplier);
-
-    // Calcular días restantes
-    $days_remaining = 30; // Simplificado
-    if (!empty($current_level->enddate) && $current_level->enddate !== '0000-00-00 00:00:00') {
-        $end_date = strtotime($current_level->enddate);
-        $now = time();
-        $days_remaining = max(1, ceil(($end_date - $now) / (24 * 60 * 60)));
-    }
-
-    // Cálculo de prorrateo simplificado
-    $total_days = 30; // Simplificado para monthly
-    $current_proportional = ($current_amount * $days_remaining) / $total_days;
-    $new_proportional = ($new_total_price * $days_remaining) / $total_days;
-    $prorated_amount = max(0, $new_proportional - $current_proportional);
-
-    wp_send_json_success([
-        'is_upgrade' => true,
-        'new_total_price' => $new_total_price,
-        'prorated_amount' => round($prorated_amount, 2),
-        'days_remaining' => $days_remaining,
-        'current_amount' => $current_amount,
-        'savings' => max(0, $new_total_price - $prorated_amount)
-    ]);
-}
-*/
 // Enqueue de scripts personalizados adicionales
 function enqueue_custom_contact_form_scripts() {
     wp_enqueue_script('custom-contact-form', get_template_directory_uri() . '/js/custom-contact-form.js', array('jquery'), '1.0', true);
