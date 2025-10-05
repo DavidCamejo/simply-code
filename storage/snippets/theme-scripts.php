@@ -1,12 +1,14 @@
 <?php
 /**
- * Theme Scripts - PMPro Nextcloud Banda Integration SINCRONIZADO v2.7.7
- *
+ * Theme Scripts - PMPro Nextcloud Banda Integration SINCRONIZADO v2.8.0
+ * 
+ * Nombre del archivo: theme-scripts.php
+ * 
  * RESPONSABILIDAD: Manejo de handles de script y localización para Simply Code
  * CORREGIDO: Sincronización completa con el sistema de precios, inyección 'before'
  * MEJORADO: Sanitización defensiva, control de race conditions, logging mejorado
  *
- * @version 2.7.7
+ * @version 2.8.0
  */
 
 if (!defined('ABSPATH')) {
@@ -93,7 +95,7 @@ function banda_detect_script_handles() {
     return $all_handles;
 }
 
-// Función principal de localización mejorada
+// Función principal de localización mejorada - CORREGIDA
 function banda_localize_pricing_script_improved() {
     if (!function_exists('pmpro_getOption')) {
         banda_theme_log('PMPro functions not available, skipping localization');
@@ -101,12 +103,12 @@ function banda_localize_pricing_script_improved() {
     }
 
     $checkout_page_id = pmpro_getOption('checkout_page_id');
-    $account_page_id = pmpro_getOption('account_page_id');
+    $account_page_id  = pmpro_getOption('account_page_id');
 
     $is_relevant_page = (
-        (is_page($checkout_page_id)) ||
-        (is_page($account_page_id)) ||
-        (isset($_GET['level']) && $_GET['level'])
+        is_page($checkout_page_id) ||
+        is_page($account_page_id) ||
+        !empty($_GET['level'])
     );
 
     if (!$is_relevant_page) {
@@ -114,7 +116,6 @@ function banda_localize_pricing_script_improved() {
         return;
     }
 
-    // Determinar level_id con sanitización
     $level_id = 0;
     if (!empty($_GET['level'])) {
         $level_id = (int)sanitize_text_field($_GET['level']);
@@ -124,163 +125,181 @@ function banda_localize_pricing_script_improved() {
         $level_id = nextcloud_banda_get_current_level_id();
     }
 
-    $allowed_levels = function_exists('nextcloud_banda_get_config') ? nextcloud_banda_get_config('allowed_levels') : [2];
+    $allowed_levels = function_exists('nextcloud_banda_get_config')
+        ? nextcloud_banda_get_config('allowed_levels')
+        : [2];
+
     if (!in_array($level_id, $allowed_levels, true)) {
-        banda_theme_log('Level not allowed for localization', ['level_id' => $level_id, 'allowed_levels' => $allowed_levels]);
+        banda_theme_log('Level not allowed for localization', [
+            'level_id'       => $level_id,
+            'allowed_levels' => $allowed_levels,
+        ]);
         return;
     }
 
-    // Obtener precio base con fallback
     $base_price = NEXTCLOUD_BANDA_BASE_PRICE;
     if ($level_id > 0) {
         $level = pmpro_getLevel($level_id);
         if ($level && !empty($level->initial_payment) && $level->initial_payment > 0) {
-            $base_price = (float)$level->initial_payment;
+            $base_price = (float) $level->initial_payment;
         }
     }
 
-    // Inicializar valores por defecto
-    $current_storage = '1tb';
-    $current_users = 2;
-    $current_frequency = 'monthly';
-    $has_previous_config = false;
-    $used_space_tb = 0;
-    $next_payment_date = null;
-    $has_active_membership = false;
-    $current_subscription_data = null;
+    $current_storage        = '1tb';
+    $current_users          = 2;
+    $current_frequency      = 'monthly';
+    $has_previous_config    = false;
+    $used_space_tb          = 0;
+    $next_payment_date      = null;
+    $has_active_membership  = false;
+    $current_subscription   = null;
+    $current_price_paid     = 0;
+    $last_credit_value      = 0;
 
-    // Procesar datos del usuario si está logueado
     if (is_user_logged_in()) {
         $user_id = get_current_user_id();
-        $user_levels = function_exists('pmpro_getMembershipLevelsForUser') ? pmpro_getMembershipLevelsForUser($user_id) : [];
-        $has_banda_membership = false;
-        
-        // Verificar membresía activa
-        if (!empty($user_levels)) {
-            foreach ($user_levels as $l) {
-                if (in_array((int)$l->id, $allowed_levels, true)) {
-                    // Verificar que la membresía esté activa
-                    if (empty($l->enddate) || $l->enddate === '0000-00-00 00:00:00' || strtotime($l->enddate) > time()) {
-                        $has_banda_membership = true;
-                        $has_active_membership = true;
-                        break;
+
+        if (
+            function_exists('nextcloud_banda_get_next_payment_info') &&
+            function_exists('nextcloud_banda_get_user_real_config_improved')
+        ) {
+            $user_levels = pmpro_getMembershipLevelsForUser($user_id);
+
+            if (!empty($user_levels)) {
+                foreach ($user_levels as $l) {
+                    if (in_array((int) $l->id, $allowed_levels, true)) {
+                        $cycle_info = nextcloud_banda_get_next_payment_info($user_id);
+                        if ($cycle_info && !empty($cycle_info['cycle_end']) && $cycle_info['cycle_end'] > time()) {
+                            $has_active_membership = true;
+                            break;
+                        }
                     }
                 }
             }
-        }
 
-        // Obtener configuración previa si hay membresía activa
-        if ($has_banda_membership && $has_active_membership) {
-            $config_json = get_user_meta($user_id, 'nextcloud_banda_config', true);
-            if (!empty($config_json)) {
-                $config = json_decode($config_json, true);
-                if (is_array($config) && json_last_error() === JSON_ERROR_NONE && !isset($config['auto_created'])) {
-                    $current_storage = sanitize_text_field($config['storage_space'] ?? '1tb');
-                    $current_users = max(2, min(20, intval($config['num_users'] ?? 2)));
-                    $current_frequency = sanitize_text_field($config['payment_frequency'] ?? 'monthly');
-                    $has_previous_config = true;
-                }
-            }
-
-            // Obtener datos de suscripción para prorrateo
-            if (function_exists('pmpro_getMembershipLevelForUser')) {
+            if ($has_active_membership) {
                 $level = pmpro_getMembershipLevelForUser($user_id);
-                if (!empty($level)) {
-                    $current_subscription_data = [
-                        'storage_space' => $current_storage,
-                        'num_users' => $current_users,
-                        'payment_frequency' => $current_frequency,
-                        'final_amount' => !empty($level->initial_payment) ? (float)$level->initial_payment : 0,
-                        'subscription_end_date' => !empty($level->enddate) && $level->enddate !== '0000-00-00 00:00:00' ? $level->enddate : null,
-                        'subscription_start_date' => !empty($level->startdate) ? $level->startdate : null
+
+                if ($level) {
+                    $real_config = nextcloud_banda_get_user_real_config_improved($user_id, $level);
+
+                    if (!empty($real_config) && $real_config['source'] !== 'defaults_no_active_membership') {
+                        $current_storage     = sanitize_text_field($real_config['storage_space'] ?? '1tb');
+                        $current_users       = max(2, min(20, intval($real_config['num_users'] ?? 2)));
+                        $current_frequency   = sanitize_text_field($real_config['payment_frequency'] ?? 'monthly');
+                        $has_previous_config = true;
+
+                        $current_price_paid = !empty($real_config['current_cycle_amount'])
+                            ? (float) $real_config['current_cycle_amount']
+                            : ((float) $level->initial_payment);
+                        $last_credit_value = !empty($real_config['last_proration_credit'])
+                            ? (float) $real_config['last_proration_credit']
+                            : 0.0;
+                    }
+                }
+
+                if ($level) {
+                    $cycle_number = (int) ($level->cycle_number ?? 1);
+                    $cycle_period = (string) ($level->cycle_period ?? 'Month');
+
+                    $derived_frequency = function_exists('nextcloud_banda_derive_frequency_from_cycle')
+                        ? nextcloud_banda_derive_frequency_from_cycle($cycle_number, $cycle_period)
+                        : 'monthly';
+
+                    $cycle_label = function_exists('nextcloud_banda_map_cycle_label')
+                        ? nextcloud_banda_map_cycle_label($cycle_number, $cycle_period)
+                        : 'Mensal';
+
+                    $current_subscription = [
+                        'storage_space'            => $current_storage,
+                        'num_users'                => $current_users,
+                        'payment_frequency'        => $derived_frequency,
+                        'cycle_label'              => $cycle_label,
+                        'cycle_number'             => $cycle_number,
+                        'cycle_period'             => $cycle_period,
+                        'final_amount'             => !empty($level->initial_payment) ? (float) $level->initial_payment : 0,
+                        'current_price_paid'       => $current_price_paid,
+                        'last_credit_value'        => $last_credit_value,
+                        'subscription_end_date'    => (!empty($level->enddate) && $level->enddate !== '0000-00-00 00:00:00') ? $level->enddate : null,
+                        'subscription_start_date'  => !empty($level->startdate) ? $level->startdate : null,
                     ];
                 }
-            }
 
-            // Obtener espacio usado
-            if (function_exists('nextcloud_banda_get_used_space_tb')) {
-                $used_space_tb = nextcloud_banda_get_used_space_tb($user_id);
-            }
+                if (function_exists('nextcloud_banda_get_used_space_tb')) {
+                    $used_space_tb = nextcloud_banda_get_used_space_tb($user_id);
+                }
 
-            // Obtener fecha de próximo pago
-            if (function_exists('pmpro_getMembershipLevelForUser')) {
-                $level = pmpro_getMembershipLevelForUser($user_id);
-                                // Obtener fecha de próximo pago usando la nueva función
-                                if (function_exists('nextcloud_banda_get_next_payment_info')) {
-                                        $level = pmpro_getMembershipLevelForUser($user_id);
-                                        $cycle_info = nextcloud_banda_get_next_payment_info($user_id, $level);
-                                        if ($cycle_info && !empty($cycle_info['next_payment_ts'])) {
-                                                $next_payment_date = date('c', $cycle_info['next_payment_ts']);
-                                        }
-                                }
+                $cycle_info = nextcloud_banda_get_next_payment_info($user_id);
+                if ($cycle_info && !empty($cycle_info['next_payment_date'])) {
+                    $next_payment_date = date('c', (int) $cycle_info['next_payment_date']);
+                }
             }
         }
     }
 
-    // Obtener configuraciones del sistema
-    $price_per_tb = function_exists('nextcloud_banda_get_config') ? nextcloud_banda_get_config('price_per_tb') : 70.00;
-    $price_per_user = function_exists('nextcloud_banda_get_config') ? nextcloud_banda_get_config('price_per_additional_user') : 10.00;
-    $base_users_included = function_exists('nextcloud_banda_get_config') ? nextcloud_banda_get_config('base_users_included') : 2;
-    $base_storage_included = function_exists('nextcloud_banda_get_config') ? nextcloud_banda_get_config('base_storage_included') : 1;
-    $frequency_multipliers = function_exists('nextcloud_banda_get_config') ? nextcloud_banda_get_config('frequency_multipliers') : [
-        'monthly' => 1.0, 'semiannual' => 5.7, 'annual' => 10.8, 'biennial' => 20.4, 'triennial' => 28.8, 'quadrennial' => 36.0, 'quinquennial' => 42.0
-    ];
+    $configs_available = function_exists('nextcloud_banda_get_config');
 
-    // Preparar datos de localización
+    $price_per_tb         = $configs_available ? nextcloud_banda_get_config('price_per_tb') : 70.00;
+    $price_per_user       = $configs_available ? nextcloud_banda_get_config('price_per_additional_user') : 10.00;
+    $base_users_included  = $configs_available ? nextcloud_banda_get_config('base_users_included') : 2;
+    $base_storage_tb      = $configs_available ? nextcloud_banda_get_config('base_storage_included') : 1;
+    $frequency_multipliers = $configs_available
+        ? nextcloud_banda_get_config('frequency_multipliers')
+        : [
+            'monthly'     => 1.0,
+            'semiannual'  => 5.7,
+            'annual'      => 10.8,
+            'biennial'    => 20.4,
+            'triennial'   => 28.8,
+            'quadrennial' => 36.0,
+            'quinquennial'=> 42.0,
+        ];
+
     $localization = [
-        'level_id' => $level_id,
-        'base_price' => $base_price,
-        'currency_symbol' => 'R$',
-        'price_per_tb' => (float)$price_per_tb,
-        'price_per_user' => (float)$price_per_user,
-        'base_users_included' => (int)$base_users_included,
-        'base_storage_included' => (int)$base_storage_included,
-        'current_storage' => $current_storage,
-        'current_users' => $current_users,
-        'current_frequency' => $current_frequency,
-        'has_previous_config' => (bool)$has_previous_config,
-        'hasActiveMembership' => (bool)$has_active_membership,
-        'current_subscription_data' => $current_subscription_data,
-        'used_space_tb' => (float)$used_space_tb,
-        'next_payment_date' => $next_payment_date,
-        'frequency_multipliers' => $frequency_multipliers,
-        'frequency_days' => [
-            'monthly' => 30, 'semiannual' => 182, 'annual' => 365,
-            'biennial' => 365*2, 'triennial' => 365*3, 'quadrennial' => 365*4, 'quinquennial' => 365*5
+        'level_id'                 => $level_id,
+        'base_price'               => $base_price,
+        'currency_symbol'          => 'R$',
+        'price_per_tb'             => (float) $price_per_tb,
+        'price_per_user'           => (float) $price_per_user,
+        'base_users_included'      => (int) $base_users_included,
+        'base_storage_included'    => (int) $base_storage_tb,
+        'current_storage'          => $current_storage,
+        'current_users'            => $current_users,
+        'current_frequency'        => $current_frequency,
+        'has_previous_config'      => (bool) $has_previous_config,
+        'hasActiveMembership'      => (bool) $has_active_membership,
+        'current_subscription_data'=> $current_subscription,
+        'used_space_tb'            => (float) $used_space_tb,
+        'next_payment_date'        => $next_payment_date,
+        'frequency_multipliers'    => $frequency_multipliers,
+        'frequency_days'           => [
+            'monthly'     => 30,
+            'semiannual'  => 182,
+            'annual'      => 365,
+            'biennial'    => 730,
+            'triennial'   => 1095,
+            'quadrennial' => 1460,
+            'quinquennial'=> 1825,
         ],
-        'debug' => defined('WP_DEBUG') && WP_DEBUG,
-        'version' => defined('NEXTCLOUD_BANDA_PLUGIN_VERSION') ? NEXTCLOUD_BANDA_PLUGIN_VERSION : '2.7.7',
-        'ajax_url' => admin_url('admin-ajax.php'),
-        'nonce' => wp_create_nonce('nextcloud_banda_nonce'),
-        'base_price_constant' => NEXTCLOUD_BANDA_BASE_PRICE
+        'debug'                    => defined('WP_DEBUG') && WP_DEBUG,
+        'version'                  => defined('NEXTCLOUD_BANDA_PLUGIN_VERSION') ? NEXTCLOUD_BANDA_PLUGIN_VERSION : '2.8.0',
+        'ajax_url'                 => admin_url('admin-ajax.php'),
+        'nonce'                    => wp_create_nonce('nextcloud_banda_proration'),
+        'base_price_constant'      => NEXTCLOUD_BANDA_BASE_PRICE,
     ];
 
-    banda_theme_log('Localization data prepared', [
-        'level_id' => $level_id,
-        'base_price' => $base_price,
-        'base_price_constant' => NEXTCLOUD_BANDA_BASE_PRICE,
-        'has_previous_config' => $has_previous_config,
-        'has_active_membership' => $has_active_membership,
-        'user_logged_in' => is_user_logged_in(),
-        'current_values' => ['storage' => $current_storage, 'users' => $current_users, 'frequency' => $current_frequency]
-    ]);
-
-    // Codificar datos como JSON
     $json = wp_json_encode($localization, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if ($json === false) {
-        banda_theme_log('Failed to json_encode localization data', []);
+        banda_theme_log('Failed to json_encode localization data');
         return;
     }
 
     $inline_script = "window.nextcloud_banda_pricing = {$json};";
-
-    // Intentar inyectar como inline 'before' sobre un handle detectado
-    $handles = banda_detect_script_handles();
-    $localized = false;
+    $handles       = banda_detect_script_handles();
+    $localized     = false;
 
     foreach ($handles as $handle) {
-        if (wp_script_is($handle, 'registered') || wp_script_is($handle, 'enqueued')) {
-            // Inyectar inline justo antes del handle detectado para evitar race conditions
+        if (wp_script_is($handle, 'registered')) {
             wp_add_inline_script($handle, $inline_script, 'before');
             banda_theme_log("Inline localization injected before handle: {$handle}");
             $localized = true;
@@ -290,14 +309,14 @@ function banda_localize_pricing_script_improved() {
 
     // Fallbacks si no se pudo inyectar 'before' en ningún handle
     if (!$localized) {
-        // Fallback 1: inyectar en wp_head temprano
-        add_action('wp_head', function() use ($json) {
-            echo "<script>window.nextcloud_banda_pricing = {$json};</script>\n";
+        // Fallback 1: wp_head temprano
+        add_action('wp_head', function() use ($inline_script) {
+            echo "<script>{$inline_script}</script>\n";
         }, 1);
 
         // Fallback 2: wp_footer como backup
-        add_action('wp_footer', function() use ($json) {
-            echo "<script>if (typeof window.nextcloud_banda_pricing === 'undefined') { window.nextcloud_banda_pricing = {$json}; console.log('[PMPro Banda Theme] Localization injected via footer fallback'); }</script>\n";
+        add_action('wp_footer', function() use ($inline_script) {
+            echo "<script>if (typeof window.nextcloud_banda_pricing === 'undefined') { {$inline_script} console.log('[PMPro Banda Theme] Localization injected via footer fallback'); }</script>\n";
         }, 5);
 
         banda_theme_log('Localization injected via inline head/footer fallback', []);
@@ -309,19 +328,24 @@ function banda_localize_pricing_script_improved() {
         'method' => $localized ? 'inline_before_handle' : 'inline_head_footer_fallback',
         'handles_checked' => count($handles),
         'base_price' => $base_price,
-        'base_price_constant' => NEXTCLOUD_BANDA_BASE_PRICE
+        'base_price_constant' => NEXTCLOUD_BANDA_BASE_PRICE,
+        'has_subscription_data' => !empty($current_subscription_data)
     ]);
 }
 
-// Hooks para ejecutar la localización
-add_action('wp_enqueue_scripts', function() {
+// Hooks para ejecutar la localización - MEJORADOS
+add_action('wp_enqueue_scripts', 'banda_enqueue_banda_assets', 20);
+function banda_enqueue_banda_assets() {
     wp_enqueue_style('dashicons');
     banda_localize_pricing_script_improved();
-}, 20);
+}
 
+// Fallback adicional para asegurar ejecución
 add_action('wp_head', function() {
-    banda_localize_pricing_script_improved();
-}, 5);
+    if (!did_action('banda_localize_pricing_script_improved')) {
+        banda_localize_pricing_script_improved();
+    }
+}, 999);
 
 // Función de logging simplificada
 function banda_theme_log($message, $context = []) {
@@ -348,10 +372,11 @@ add_action('wp_enqueue_scripts', 'enqueue_custom_contact_form_scripts');
 
 // Log de inicialización
 banda_theme_log('Theme Scripts loaded successfully - SYNCHRONIZED VERSION', [
-    'version' => '2.7.7',
+    'version' => '2.8.0',
     'base_price_constant' => NEXTCLOUD_BANDA_BASE_PRICE,
     'functions_available' => [
         'normalize_banda_config' => function_exists('normalize_banda_config'),
-        'pmpro_functions' => function_exists('pmpro_getOption')
+        'pmpro_functions' => function_exists('pmpro_getOption'),
+        'nextcloud_banda_functions' => function_exists('nextcloud_banda_get_config')
     ]
 ]);

@@ -1,11 +1,13 @@
 <?php
 /**
- * PMPro Dynamic Pricing para Nextcloud Banda - VERSIÓN SINCRONIZADA v2.7.7
+ * PMPro Dynamic Pricing para Nextcloud Banda - VERSIÓN SINCRONIZADA v2.8.0
+ * 
+ * Nombre del archivo: nextcloud-banda-dynamic-pricing.php
  * 
  * RESPONSABILIDAD: Lógica de checkout, campos dinámicos y cálculos de precio
  * CORREGIDO: Sincronización completa con theme-scripts.php y JavaScript
  * 
- * @version 2.7.7
+ * @version 2.8.0
  */
 
 if (!defined('ABSPATH')) {
@@ -16,7 +18,7 @@ if (!defined('ABSPATH')) {
 // CONFIGURACIÓN GLOBAL Y CONSTANTES - SINCRONIZADAS
 // ====
 
-define('NEXTCLOUD_BANDA_PLUGIN_VERSION', '2.7.7');
+define('NEXTCLOUD_BANDA_PLUGIN_VERSION', '2.8.0');
 define('NEXTCLOUD_BANDA_CACHE_GROUP', 'nextcloud_banda_dynamic');
 define('NEXTCLOUD_BANDA_CACHE_EXPIRY', HOUR_IN_SECONDS);
 
@@ -467,21 +469,21 @@ function nextcloud_banda_safe_ts($value) {
 function nextcloud_banda_get_next_payment_info($user_id) {
     global $wpdb;
 
-    nextcloud_banda_log('proration', "=== GET NEXT PAYMENT INFO START ===");
-    nextcloud_banda_log('proration', "User ID: $user_id");
+    nextcloud_banda_log_debug("=== GET NEXT PAYMENT INFO START ===");
+    nextcloud_banda_log_debug("User ID: $user_id");
 
     $current_level = pmpro_getMembershipLevelForUser($user_id);
     if (empty($current_level) || empty($current_level->id)) {
-        nextcloud_banda_log('proration', "ERROR: Usuario sin membresía activa");
+        nextcloud_banda_log_debug("ERROR: Usuario sin membresía activa");
         return false;
     }
 
     $cycle_number = (int) ($current_level->cycle_number ?? 0);
     $cycle_period = strtolower((string) ($current_level->cycle_period ?? ''));
-    nextcloud_banda_log('proration', "Level Cycle: $cycle_number $cycle_period");
+    nextcloud_banda_log_debug("Level Cycle: $cycle_number $cycle_period");
 
     if ($cycle_number <= 0 || empty($cycle_period)) {
-        nextcloud_banda_log('proration', "ERROR: Ciclo inválido en el nivel");
+        nextcloud_banda_log_debug("ERROR: Ciclo inválido en el nivel");
         return false;
     }
 
@@ -489,9 +491,9 @@ function nextcloud_banda_get_next_payment_info($user_id) {
     $tz_string = get_option('timezone_string');
     if (!$tz_string) {
         $gmt_offset = (float) get_option('gmt_offset', 0);
-        // Fallback a un UTC offset fijo si no hay timezone_string
-        $tz_string = sprintf('UTC%+d', (int) $gmt_offset);
+        $tz_string = $gmt_offset >= 0 ? "UTC+$gmt_offset" : "UTC$gmt_offset";
     }
+    
     try {
         $tz = new DateTimeZone($tz_string);
     } catch (Exception $e) {
@@ -502,7 +504,7 @@ function nextcloud_banda_get_next_payment_info($user_id) {
     $now_ts = current_time('timestamp');
     $now = (new DateTimeImmutable('@' . $now_ts))->setTimezone($tz);
 
-    // 1) Buscar última orden "success". Si no hay, probar cancelled, luego refunded.
+    // Buscar última orden "success"
     $last_order = $wpdb->get_row($wpdb->prepare(
         "SELECT * FROM {$wpdb->pmpro_membership_orders}
          WHERE user_id = %d AND status = 'success'
@@ -529,31 +531,27 @@ function nextcloud_banda_get_next_payment_info($user_id) {
 
     // Determinar cycle_start_anchor
     if ($last_order && !empty($last_order->timestamp)) {
-        // pmpro guarda 'timestamp' como datetime en zona del sitio (comúnmente).
-        // Creamos DateTime desde ese string en la zona WP.
         try {
             $anchor_dt = new DateTimeImmutable($last_order->timestamp, $tz);
         } catch (Exception $e) {
             $anchor_dt = $now;
-            nextcloud_banda_log('proration', "WARN: No se pudo parsear timestamp de orden, usando NOW");
+            nextcloud_banda_log_debug("WARN: No se pudo parsear timestamp de orden, usando NOW");
         }
-        nextcloud_banda_log('proration', "Última orden: ID {$last_order->id}, Timestamp: " . $anchor_dt->format('Y-m-d H:i:s'));
+        nextcloud_banda_log_debug("Última orden: ID {$last_order->id}, Timestamp: " . $anchor_dt->format('Y-m-d H:i:s'));
     } elseif (!empty($current_level->startdate)) {
-        // startdate normalmente es un timestamp Unix
-        $start_ts = (int) $current_level->startdate;
+        $start_ts = nextcloud_banda_safe_ts($current_level->startdate);
         $anchor_dt = (new DateTimeImmutable('@' . $start_ts))->setTimezone($tz);
-        nextcloud_banda_log('proration', "Usando startdate: " . $anchor_dt->format('Y-m-d H:i:s'));
+        nextcloud_banda_log_debug("Usando startdate: " . $anchor_dt->format('Y-m-d H:i:s'));
     } else {
         $anchor_dt = $now;
-        nextcloud_banda_log('proration', "No hay órdenes ni startdate, usando NOW como ancla");
+        nextcloud_banda_log_debug("No hay órdenes ni startdate, usando NOW como ancla");
     }
 
-    // Normalizar a 00:00 si tu prorrateo es por días completos
+    // Normalizar a 00:00 para consistencia en cálculos diarios
     $cycle_start_dt = $anchor_dt->setTime(0, 0, 0);
-    nextcloud_banda_log('proration', "Cycle Start (normalizado): " . $cycle_start_dt->format('Y-m-d H:i:s'));
+    nextcloud_banda_log_debug("Cycle Start (normalizado): " . $cycle_start_dt->format('Y-m-d H:i:s'));
 
     // Construir intervalo del ciclo
-    // Mapear period a DateInterval
     switch ($cycle_period) {
         case 'day':
         case 'days':
@@ -572,48 +570,45 @@ function nextcloud_banda_get_next_payment_info($user_id) {
             $interval_spec = 'P' . $cycle_number . 'Y';
             break;
         default:
-            nextcloud_banda_log('proration', "ERROR: Período desconocido: $cycle_period");
+            nextcloud_banda_log_debug("ERROR: Período desconocido: $cycle_period");
             return false;
     }
 
     try {
         $interval = new DateInterval($interval_spec);
     } catch (Exception $e) {
-        nextcloud_banda_log('proration', "ERROR: No se pudo crear DateInterval: $interval_spec");
+        nextcloud_banda_log_debug("ERROR: No se pudo crear DateInterval: $interval_spec");
         return false;
     }
 
-    // Calcular cuántos ciclos completos han pasado entre cycle_start_dt y now para saltar directo
-    // Evita while iterativo.
+    // Calcular el ciclo actual de forma eficiente
     $cycle_end_dt = $cycle_start_dt;
-    if ($cycle_period === 'month' || $cycle_period === 'months' || $cycle_period === 'year' || $cycle_period === 'years') {
-        // Para meses/años, iterar por saltos puede ser necesario por longitudes variables.
-        // Aun así, podemos estimar y luego ajustar.
+    
+    // Para meses y años, usar cálculo más preciso
+    if ($cycle_period === 'month' || $cycle_period === 'months' || 
+        $cycle_period === 'year' || $cycle_period === 'years') {
+        
+        // Estimar ciclos pasados
         $estimate_cycles = 0;
         if ($cycle_period === 'month' || $cycle_period === 'months') {
-            // Estimación aproximada por meses
             $diff = $cycle_start_dt->diff($now);
             $months_total = $diff->y * 12 + $diff->m;
-            // Ajusta por días si ya cruzó el día del mes
-            if ($diff->d > 0 || $diff->h > 0 || $diff->i > 0 || $diff->s > 0) {
-                // ya pasó parte del siguiente mes
-            }
             $estimate_cycles = (int) floor($months_total / $cycle_number);
         } else {
-            // años
             $diff = $cycle_start_dt->diff($now);
             $years_total = $diff->y;
             $estimate_cycles = (int) floor($years_total / $cycle_number);
         }
+        
+        // Avanzar por bloques grandes si hay muchos ciclos
         if ($estimate_cycles > 0) {
-            // Avanza por bloques grandes
             try {
                 $block_interval_spec = ($cycle_period === 'month' || $cycle_period === 'months')
                     ? 'P' . ($estimate_cycles * $cycle_number) . 'M'
                     : 'P' . ($estimate_cycles * $cycle_number) . 'Y';
                 $block_interval = new DateInterval($block_interval_spec);
                 $cycle_start_dt = $cycle_start_dt->add($block_interval);
-                $cycle_end_dt   = $cycle_start_dt->add($interval);
+                $cycle_end_dt = $cycle_start_dt->add($interval);
             } catch (Exception $e) {
                 // fallback a lógica simple
                 $cycle_end_dt = $cycle_start_dt->add($interval);
@@ -622,27 +617,31 @@ function nextcloud_banda_get_next_payment_info($user_id) {
             $cycle_end_dt = $cycle_start_dt->add($interval);
         }
 
-        // Si aún estamos más allá del end, avanza ciclos hasta pasarlo (pocos pasos)
+        // Ajustar hasta encontrar el ciclo correcto
         $guard = 0;
-        while ($cycle_end_dt <= $now && $guard < 24) { // 24 saltos máximos de seguridad
+        while ($cycle_end_dt <= $now && $guard < 24) {
             $cycle_start_dt = $cycle_end_dt;
             $cycle_end_dt = $cycle_start_dt->add($interval);
             $guard++;
         }
+        
         if ($guard >= 24) {
-            nextcloud_banda_log('proration', "ERROR: Guardia excedida al ajustar ciclos (mes/año)");
+            nextcloud_banda_log_debug("ERROR: Guardia excedida al ajustar ciclos");
             return false;
         }
     } else {
-        // Días/semanas tienen longitud fija en días: podemos saltar directo con aritmética
-        $days_per_cycle = ($cycle_period === 'week' || $cycle_period === 'weeks') ? $cycle_number * 7 : $cycle_number;
+        // Para días y semanas usar aritmética directa
+        $days_per_cycle = ($cycle_period === 'week' || $cycle_period === 'weeks') 
+            ? $cycle_number * 7 : $cycle_number;
         $days_since_start = (int) floor(($now->getTimestamp() - $cycle_start_dt->getTimestamp()) / DAY_IN_SECONDS);
         $cycles_passed = ($days_since_start > 0) ? (int) floor($days_since_start / $days_per_cycle) : 0;
+        
         if ($cycles_passed > 0) {
             $cycle_start_dt = $cycle_start_dt->add(new DateInterval('P' . ($cycles_passed * $days_per_cycle) . 'D'));
         }
         $cycle_end_dt = $cycle_start_dt->add(new DateInterval('P' . $days_per_cycle . 'D'));
-        // Si aún quedó atrás, avanza uno más
+        
+        // Ajuste final si necesario
         if ($cycle_end_dt <= $now) {
             $cycle_start_dt = $cycle_end_dt;
             $cycle_end_dt = $cycle_start_dt->add(new DateInterval('P' . $days_per_cycle . 'D'));
@@ -650,18 +649,122 @@ function nextcloud_banda_get_next_payment_info($user_id) {
     }
 
     $cycle_start_ts = $cycle_start_dt->getTimestamp();
-    $cycle_end_ts   = $cycle_end_dt->getTimestamp();
+    $cycle_end_ts = $cycle_end_dt->getTimestamp();
 
-    nextcloud_banda_log('proration', "Cycle Start: " . $cycle_start_dt->format('Y-m-d H:i:s'));
-    nextcloud_banda_log('proration', "Cycle End (Next Payment): " . $cycle_end_dt->format('Y-m-d H:i:s'));
-    nextcloud_banda_log('proration', "=== GET NEXT PAYMENT INFO END ===");
+    // Calcular días totales y restantes
+    $total_seconds = max(1, $cycle_end_ts - $cycle_start_ts);
+    $remaining_seconds = max(0, $cycle_end_ts - $now->getTimestamp());
+    $total_days = max(1, (int)round($total_seconds / DAY_IN_SECONDS));
+    $days_remaining = max(0, (int)floor($remaining_seconds / DAY_IN_SECONDS));
+    
+    if ($remaining_seconds > 0 && $days_remaining === 0) {
+        $days_remaining = 1;
+    }
+
+    nextcloud_banda_log_debug("Cycle Start: " . $cycle_start_dt->format('Y-m-d H:i:s'));
+    nextcloud_banda_log_debug("Cycle End (Next Payment): " . $cycle_end_dt->format('Y-m-d H:i:s'));
+    nextcloud_banda_log_debug("Days remaining: $days_remaining, Total days: $total_days");
+    nextcloud_banda_log_debug("=== GET NEXT PAYMENT INFO END ===");
 
     return [
         'next_payment_date' => $cycle_end_ts,
-        'cycle_start'       => $cycle_start_ts,
-        'cycle_end'         => $cycle_end_ts
+        'cycle_start' => $cycle_start_ts,
+        'cycle_end' => $cycle_end_ts,
+        'days_remaining' => $days_remaining,
+        'total_days' => $total_days
     ];
 }
+
+// ====
+// NUEVOS AUXILIARES
+// ====
+
+/**
+ * Obtiene información de prorrateo con cache
+ */
+function nextcloud_banda_get_cached_proration($user_id, $level_id, $storage, $users, $frequency) {
+    $cache_key = "proration_{$user_id}_{$level_id}_{$storage}_{$users}_{$frequency}";
+    $cached = nextcloud_banda_cache_get($cache_key);
+    
+    if ($cached !== false) {
+        return $cached;
+    }
+    
+    $proration = nextcloud_banda_calculate_proration_core_aligned(
+        $user_id, $level_id, $storage, $users, $frequency
+    );
+    
+    // Cache por 5 minutos
+    nextcloud_banda_cache_set($cache_key, $proration, 300);
+    
+    return $proration;
+}
+
+/**
+ * Formatea valores monetarios de forma consistente
+ */
+function nextcloud_banda_format_currency($amount) {
+    return 'R$ ' . number_format((float)$amount, 2, ',', '.');
+}
+
+/**
+ * Formatea porcentajes de descuento
+ */
+function nextcloud_banda_format_discount($frequency) {
+    $discounts = [
+        'monthly' => 0,
+        'semiannual' => 5,
+        'annual' => 10,
+        'biennial' => 15,
+        'triennial' => 20,
+        'quadrennial' => 25,
+        'quinquennial' => 30
+    ];
+    
+    $discount = $discounts[$frequency] ?? 0;
+    return $discount > 0 ? "(-{$discount}%)" : "";
+}
+
+/**
+ * Valida configuración antes del checkout
+ */
+function nextcloud_banda_validate_checkout_config() {
+    $required_fields = ['storage_space', 'num_users', 'payment_frequency'];
+    
+    foreach ($required_fields as $field) {
+        if (!isset($_REQUEST[$field]) || empty($_REQUEST[$field])) {
+            return new WP_Error('missing_field', "Campo requerido: {$field}");
+        }
+    }
+    
+    // Validar rangos
+    $num_users = (int)$_REQUEST['num_users'];
+    $config = nextcloud_banda_get_config();
+    
+    if ($num_users < $config['min_users'] || $num_users > $config['max_users']) {
+        return new WP_Error('invalid_users', "Número de usuarios fuera de rango");
+    }
+    
+    $storage_space = sanitize_text_field($_REQUEST['storage_space']);
+    $valid_storage = array_keys($config['storage_options']);
+    
+    if (!in_array($storage_space, $valid_storage, true)) {
+        return new WP_Error('invalid_storage', "Espacio de almacenamiento inválido");
+    }
+    
+    $payment_frequency = strtolower(sanitize_text_field($_REQUEST['payment_frequency']));
+    $valid_frequencies = array_keys($config['frequency_multipliers']);
+    
+    if (!in_array($payment_frequency, $valid_frequencies, true)) {
+        return new WP_Error('invalid_frequency', "Frecuencia de pago inválida");
+    }
+    
+    return true;
+}
+
+// ====
+// NUEVOS AUXILIARES - FIN
+// ====
 
 /**
  * Suma un período usando DateTimeImmutable para evitar errores de strtotime/DST.
@@ -1113,99 +1216,113 @@ function nextcloud_banda_configure_billing_period($level, $payment_frequency, $t
 // HOOK PRINCIPAL DE MODIFICACIÓN DE PRECIO (MODIFICADO CON PRORRATEO)
 // ====
 
-function nextcloud_banda_modify_level_pricing($level) {
-    if (!empty($level->_nextcloud_banda_applied)) {
+/**
+ * Ajusta dinámicamente el precio del nivel seleccionado en el checkout
+ * con base en la configuración de Nextcloud Banda y adjunta la información
+ * de prorrateo para su consumo posterior en la interfaz.
+ *
+ * @param stdClass   $level
+ * @param int|null   $user_id
+ *
+ * @return stdClass
+ */
+function nextcloud_banda_modify_level_pricing($level, $user_id = null) {
+    if (empty($level) || empty($level->id)) {
         return $level;
     }
 
-    $allowed_levels = nextcloud_banda_get_config('allowed_levels');
-    if (!in_array((int)$level->id, $allowed_levels, true)) {
-        return $level;
-    }
-
-    $required_fields = ['storage_space', 'num_users', 'payment_frequency'];
-    foreach ($required_fields as $field) {
-        if (!isset($_POST[$field]) || $_POST[$field] === '') {
-            return $level;
-        }
-    }
-
-    try {
-        // Entradas saneadas
-        $storage_space     = sanitize_text_field(wp_unslash($_POST['storage_space']));
-        $num_users         = (int)sanitize_text_field(wp_unslash($_POST['num_users']));
-        $payment_frequency = sanitize_text_field(wp_unslash($_POST['payment_frequency']));
-
-        // Base price fallback al level original
-        $base_price = NEXTCLOUD_BANDA_BASE_PRICE;
-        $original_level = pmpro_getLevel($level->id);
-        if ($original_level && !empty($original_level->initial_payment)) {
-            $base_price = (float)$original_level->initial_payment;
-        } elseif (!empty($level->initial_payment)) {
-            $base_price = (float)$level->initial_payment;
-        }
-
-        // 1) Calcular precio total para la nueva configuración
-        $new_total_price = nextcloud_banda_calculate_pricing($storage_space, $num_users, $payment_frequency, $base_price);
-
-        // 2) Configurar el ciclo del level según frecuencia (canon PMPro)
-        $level = nextcloud_banda_configure_billing_period($level, $payment_frequency, $new_total_price);
-
-        // 3) Si el usuario ya tiene el mismo level activo y es upgrade -> PRORRATEO
+    if (empty($user_id)) {
         $user_id = get_current_user_id();
-        if ($user_id && function_exists('pmpro_hasMembershipLevel') && pmpro_hasMembershipLevel($level->id, $user_id)) {
-            if (nextcloud_banda_is_plan_upgrade($user_id, $storage_space, $num_users, $payment_frequency)) {
-                // Cálculo canon: usar último pago + intervalo del ciclo del level para derivar próximo pago.
-                $proration = nextcloud_banda_calculate_proration_core_aligned($user_id, $level->id, $storage_space, $num_users);
-                
-                // CORREGIDO: Validar que $proration tenga las claves necesarias
-                $prorated_amount = isset($proration['prorated_amount']) ? (float)$proration['prorated_amount'] : 0.0;
-                $days_remaining  = isset($proration['days_remaining']) ? (int)$proration['days_remaining'] : 0;
-                $total_days      = isset($proration['total_days']) ? (int)$proration['total_days'] : 1;
-                
-                if ($prorated_amount > 0) {
-                    // Cobro actual = monto prorrateado
-                    $level->initial_payment = $prorated_amount;
-                    // Mantener billing_amount como el nuevo total por ciclo
-                    $level->billing_amount  = (float)$new_total_price;
+    }
+    
+    if (empty($user_id)) {
+        nextcloud_banda_log_debug('modify_level_pricing: sin user_id, devolviendo nivel sin cambios.', []);
+        return $level;
+    }
 
-                    nextcloud_banda_log_info('Proration (core-aligned) applied', [
-                        'user_id'         => $user_id,
-                        'level_id'        => $level->id,
-                        'new_total_price' => $new_total_price,
-                        'initial_payment' => $level->initial_payment,
-                        'days_remaining'  => $days_remaining,
-                        'total_days'      => $total_days
-                    ]);
-                } else {
-                    // Sin prorrateo válido, usar precio completo
-                    $level->initial_payment = (float)$new_total_price;
-                    $level->billing_amount  = (float)$new_total_price;
-                }
-            }
-        } else {
-            // Nueva suscripción
-            $level->initial_payment = (float)$new_total_price;
-            $level->billing_amount  = (float)$new_total_price;
-        }
+    nextcloud_banda_log_debug('=== MODIFY LEVEL PRICING START ===', [
+        'user_id'    => $user_id,
+        'level_id'   => $level->id,
+        'level_name' => $level->name ?? '',
+    ]);
 
-        $level->_nextcloud_banda_applied = true;
+    // Obtener configuración del usuario
+    $user_config = nextcloud_banda_get_user_config($user_id);
+    
+    // Valores por defecto
+    $config = nextcloud_banda_get_config();
+    $default_storage = '1tb';
+    $default_users = 2;
+    $default_frequency = 'monthly';
 
-        nextcloud_banda_log_info('Level pricing modified (core-aligned)', [
-            'level_id'          => $level->id,
-            'final_initial'     => $level->initial_payment,
-            'billing_amount'    => $level->billing_amount,
-            'storage_space'     => $storage_space,
-            'num_users'         => $num_users,
-            'payment_frequency' => $payment_frequency,
-            'base_price'        => $base_price
-        ]);
+    // Obtener valores del request o configuración guardada
+    $storage_space = isset($_REQUEST['storage_space']) ? 
+        sanitize_text_field($_REQUEST['storage_space']) : 
+        ($user_config['storage'] ? $user_config['storage'] . 'tb' : $default_storage);
 
-    } catch (Exception $e) {
-        nextcloud_banda_log_error('Exception in pricing modification', [
-            'message' => $e->getMessage()
+    $num_users = isset($_REQUEST['num_users']) ? 
+        (int) $_REQUEST['num_users'] : 
+        ($user_config['users'] ?: $default_users);
+
+    $payment_frequency = isset($_REQUEST['payment_frequency']) ? 
+        strtolower(sanitize_text_field($_REQUEST['payment_frequency'])) : 
+        ($user_config['frequency'] ?: $default_frequency);
+
+    // Validar frecuencia
+    $multipliers = $config['frequency_multipliers'] ?? ['monthly' => 1.0];
+    if (!isset($multipliers[$payment_frequency])) {
+        $payment_frequency = 'monthly';
+    }
+
+    // Obtener precio base de referencia
+    $base_price_reference = isset($level->initial_payment) ? 
+        (float) $level->initial_payment : 
+        NEXTCLOUD_BANDA_BASE_PRICE;
+
+    // Calcular precio
+    $calculated_price = nextcloud_banda_calculate_pricing(
+        $storage_space,
+        $num_users,
+        $payment_frequency,
+        $base_price_reference
+    );
+
+    // Aplicar el precio calculado al nivel
+    $level->initial_payment = round((float) $calculated_price, 2);
+    $level->billing_amount = round((float) $calculated_price, 2);
+    $level->recurring = true;
+    $level->trial_amount = 0;
+    $level->trial_limit = 0;
+
+    // Configurar el ciclo de facturación
+    $level = nextcloud_banda_configure_billing_period($level, $payment_frequency, $calculated_price);
+
+    // Calcular y adjuntar información de prorrateo solo para usuarios con membresía activa
+    if ($user_id && pmpro_hasMembershipLevel($level->id, $user_id)) {
+        $proration = nextcloud_banda_calculate_proration_core_aligned(
+            $user_id,
+            $level->id,
+            $storage_space,
+            $num_users,
+            $payment_frequency
+        );
+        
+        // Adjuntar información de prorrateo al nivel
+        $level->nextcloud_banda_proration = $proration;
+        
+        nextcloud_banda_log_debug('Proration info attached to level', [
+            'user_id' => $user_id,
+            'proration_attached' => !empty($proration),
+            'prorated_amount' => $proration['prorated_amount'] ?? 0
         ]);
     }
+
+    nextcloud_banda_log_debug('=== MODIFY LEVEL PRICING END ===', [
+        'calculated_price' => $level->initial_payment,
+        'storage_space' => $storage_space,
+        'num_users' => $num_users,
+        'payment_frequency' => $payment_frequency
+    ]);
 
     return $level;
 }
@@ -1215,12 +1332,27 @@ function nextcloud_banda_modify_level_pricing($level) {
 // ====
 
 /**
- * Obtiene la configuración actual del usuario de forma simplificada
+ * Obtiene la configuración actual del usuario de forma precisa
  */
 function nextcloud_banda_get_user_config($user_id) {
-    $config_json = get_user_meta($user_id, 'nextcloud_banda_config', true);
+    $user_levels = pmpro_getMembershipLevelsForUser($user_id);
+    $allowed_levels = nextcloud_banda_get_config('allowed_levels');
     
-    if (empty($config_json)) {
+    $current_banda_level = null;
+    if (!empty($user_levels)) {
+        foreach ($user_levels as $level) {
+            if (in_array((int)$level->id, $allowed_levels, true)) {
+                $cycle_info = nextcloud_banda_get_next_payment_info($user_id);
+                if ($cycle_info && isset($cycle_info['cycle_end']) && $cycle_info['cycle_end'] > time()) {
+                    $current_banda_level = $level;
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Si no hay membresía activa, devolver valores por defecto
+    if (!$current_banda_level) {
         return [
             'storage' => 1,
             'users' => 2,
@@ -1228,25 +1360,19 @@ function nextcloud_banda_get_user_config($user_id) {
         ];
     }
     
-    $config = json_decode($config_json, true);
-    if (!is_array($config) || json_last_error() !== JSON_ERROR_NONE) {
-        return [
-            'storage' => 1,
-            'users' => 2,
-            'frequency' => 'monthly'
-        ];
-    }
+    // Obtener configuración real usando la función mejorada
+    $real_config = nextcloud_banda_get_user_real_config_improved($user_id, $current_banda_level);
     
-    // Convertir storage_space a número (TB)
+    // Convertir storage_space a número
     $storage_tb = 1;
-    if (!empty($config['storage_space'])) {
-        $storage_tb = (int)str_replace('tb', '', strtolower($config['storage_space']));
+    if (!empty($real_config['storage_space'])) {
+        $storage_tb = (int)str_replace('tb', '', strtolower($real_config['storage_space']));
     }
     
     return [
         'storage' => $storage_tb,
-        'users' => isset($config['num_users']) ? (int)$config['num_users'] : 2,
-        'frequency' => $config['payment_frequency'] ?? 'monthly'
+        'users' => isset($real_config['num_users']) ? (int)$real_config['num_users'] : 2,
+        'frequency' => $real_config['payment_frequency'] ?? 'monthly'
     ];
 }
 
@@ -1287,17 +1413,18 @@ function nextcloud_banda_calculate_price($level_id, $storage_tb, $num_users) {
 
 /**
  * Calcula el prorrateo basado en el ciclo real del nivel PMPro
+ * CORREGIDO: Cálculo matemático preciso de prorrateo
  */
-function nextcloud_banda_calculate_proration_core_aligned($user_id, $new_level_id, $new_storage, $new_users) {
+function nextcloud_banda_calculate_proration_core_aligned($user_id, $new_level_id, $new_storage, $new_users, $new_frequency = 'monthly') {
     nextcloud_banda_log_debug("=== PRORATION CORE-ALIGNED START ===", [
         'user_id' => $user_id,
         'new_level_id' => $new_level_id,
         'new_storage' => $new_storage,
-        'new_users' => $new_users
+        'new_users' => $new_users,
+        'new_frequency' => $new_frequency
     ]);
-    
+
     $current_level = pmpro_getMembershipLevelForUser($user_id);
-    
     if (empty($current_level) || empty($current_level->id)) {
         nextcloud_banda_log_debug("Usuario sin membresía activa, proration = 0");
         return [
@@ -1308,44 +1435,215 @@ function nextcloud_banda_calculate_proration_core_aligned($user_id, $new_level_i
             'message' => 'No active membership'
         ];
     }
+
+    $config = nextcloud_banda_get_config();
+    $multipliers = $config['frequency_multipliers'] ?? ['monthly' => 1.0];
+
+    // Normalizar storage
+    $normalize_storage = function($value) {
+        if (is_numeric($value)) {
+            return max(1, (int)$value) . 'tb';
+        }
+        $value = strtolower(trim((string)$value));
+        if ($value === '') {
+            return '1tb';
+        }
+        if (strpos($value, 'tb') === false && strpos($value, 'gb') === false) {
+            $digits = preg_replace('/[^0-9]/', '', $value);
+            return $digits !== '' ? $digits . 'tb' : '1tb';
+        }
+        return $value;
+    };
     
-    // Obtener configuración actual
-    $user_config = nextcloud_banda_get_user_config($user_id);
-    $current_storage = $user_config['storage'];
-    $current_users = $user_config['users'];
-    
-    nextcloud_banda_log_debug("Current config", [
-        'storage' => $current_storage,
-        'users' => $current_users
+    $extract_tb = function($slug) {
+        $slug = strtolower((string)$slug);
+        if (strpos($slug, 'gb') !== false) {
+            $numeric = (float)preg_replace('/[^0-9.]/', '', $slug);
+            return max(1, (int)ceil($numeric / 1024));
+        }
+        $numeric = (int)preg_replace('/[^0-9]/', '', $slug);
+        return max(1, $numeric);
+    };
+
+    // Validar y normalizar frecuencias
+    $new_frequency = strtolower($new_frequency ?: 'monthly');
+    if (!isset($multipliers[$new_frequency])) {
+        $new_frequency = 'monthly';
+    }
+
+    // Obtener configuraciones actuales - MEJORADO
+    $user_config_simple = nextcloud_banda_get_user_config($user_id);
+    $current_config = nextcloud_banda_get_user_real_config_improved($user_id, $current_level);
+
+    // Extraer y normalizar configuración actual - MÁS ROBUSTO
+    $current_storage_slug = $normalize_storage(
+        $current_config['storage_space'] ?? ($user_config_simple['storage'] . 'tb' ?? '1tb')
+    );
+    $current_users = (int)($current_config['num_users'] ?? $user_config_simple['users'] ?? 2);
+    $current_users = max(2, $current_users); // Mínimo 2 usuarios
+
+    $current_frequency = strtolower(
+        $current_config['payment_frequency'] ?? ($user_config_simple['frequency'] ?? 'monthly')
+    );
+    if (!isset($multipliers[$current_frequency])) {
+        $current_frequency = 'monthly';
+    }
+
+    // VALIDACIÓN CRÍTICA: Asegurar que tenemos los datos correctos
+    nextcloud_banda_log_debug("CONFIGURACIÓN ACTUAL DETECTADA", [
+        'from_real_config' => [
+            'storage_space' => $current_config['storage_space'] ?? 'NOT_SET',
+            'num_users' => $current_config['num_users'] ?? 'NOT_SET',
+            'payment_frequency' => $current_config['payment_frequency'] ?? 'NOT_SET',
+            'final_amount' => $current_config['final_amount'] ?? 'NOT_SET',
+            'source' => $current_config['source'] ?? 'NOT_SET'
+        ],
+        'from_simple_config' => $user_config_simple,
+        'normalized_values' => [
+            'storage_slug' => $current_storage_slug,
+            'users' => $current_users,
+            'frequency' => $current_frequency
+        ]
     ]);
-    
-    // Convertir new_storage a número
-    $new_storage_tb = (int)str_replace('tb', '', strtolower($new_storage));
-    
-    // Calcular precios
-    $current_price = nextcloud_banda_calculate_price($current_level->id, $current_storage, $current_users);
-    $new_price = nextcloud_banda_calculate_price($new_level_id, $new_storage_tb, $new_users);
-    
-    nextcloud_banda_log_debug("Prices calculated", [
-        'current_price' => $current_price,
-        'new_price' => $new_price
+
+    // Obtener precios base
+    $base_price_reference = NEXTCLOUD_BANDA_BASE_PRICE;
+    $level_obj = pmpro_getLevel($new_level_id);
+    if ($level_obj && !empty($level_obj->initial_payment)) {
+        $base_price_reference = (float)$level_obj->initial_payment;
+    }
+
+    // Normalizar nuevas configuraciones
+    $new_storage_slug = $normalize_storage($new_storage);
+    $new_users = max(2, (int)$new_users);
+    $new_frequency = strtolower($new_frequency ?: 'monthly');
+    if (!isset($multipliers[$new_frequency])) {
+        $new_frequency = 'monthly';
+    }
+
+    // Calcular precios actuales y nuevos - MEJORADO
+    $current_cycle_price = null;
+
+    // PRIORIDAD 1: Usar precio final guardado
+    if (!empty($current_config['final_amount']) && $current_config['final_amount'] > 0) {
+        $current_cycle_price = round((float)$current_config['final_amount'], 2);
+        nextcloud_banda_log_debug("Usando precio guardado de configuración", [
+            'precio_guardado' => $current_cycle_price,
+            'source' => $current_config['source']
+        ]);
+    }
+
+    // PRIORIDAD 2: Usar initial_payment del nivel actual
+    if (($current_cycle_price === null || $current_cycle_price <= 0) && !empty($current_level->initial_payment)) {
+        $current_cycle_price = round((float)$current_level->initial_payment, 2);
+        nextcloud_banda_log_debug("Usando initial_payment del nivel", [
+            'precio_nivel' => $current_cycle_price
+        ]);
+    }
+
+    // PRIORIDAD 3: Calcular basado en configuración
+    if ($current_cycle_price === null || $current_cycle_price <= 0) {
+        $current_cycle_price = (float)nextcloud_banda_calculate_pricing(
+            $current_storage_slug,
+            $current_users,
+            $current_frequency,
+            $base_price_reference
+        );
+        nextcloud_banda_log_debug("Calculando precio basado en configuración", [
+            'precio_calculado' => $current_cycle_price,
+            'storage' => $current_storage_slug,
+            'users' => $current_users,
+            'frequency' => $current_frequency,
+            'base_price' => $base_price_reference
+        ]);
+    }
+
+    // Asegurar que tenemos un precio válido
+    if ($current_cycle_price === null || $current_cycle_price <= 0) {
+        $current_cycle_price = $base_price_reference;
+        nextcloud_banda_log_debug("USANDO PRECIO BASE POR DEFECTO", [
+            'precio_base' => $current_cycle_price
+        ]);
+    }
+
+    $new_cycle_price = (float)nextcloud_banda_calculate_pricing(
+        $new_storage_slug,
+        $new_users,
+        $new_frequency,
+        $base_price_reference
+    );
+
+    // VALIDACIÓN FINAL ANTES DE PRORRATEO
+    nextcloud_banda_log_debug("VALIDACIÓN PRE-PRORRATEO", [
+        'current_cycle_price' => $current_cycle_price,
+        'new_cycle_price' => $new_cycle_price,
+        'price_diff' => $new_cycle_price - $current_cycle_price,
+        'current_config' => [
+            'storage' => $current_storage_slug,
+            'users' => $current_users,
+            'frequency' => $current_frequency
+        ],
+        'new_config' => [
+            'storage' => $new_storage_slug,
+            'users' => $new_users,
+            'frequency' => $new_frequency
+        ]
     ]);
-    
-    // Verificar si es upgrade
-    if ($new_price <= $current_price) {
-        nextcloud_banda_log_debug("Nuevo precio <= precio actual, no proration");
+
+    // Verificar que los precios sean válidos
+    if ($current_cycle_price <= 0) {
+        nextcloud_banda_log_error("PRECIO ACTUAL INVÁLIDO", [
+            'precio' => $current_cycle_price,
+            'configuracion' => $current_config
+        ]);
         return [
             'prorated_amount' => 0,
             'days_remaining' => 0,
             'total_days' => 1,
             'next_payment_date' => '',
-            'message' => 'Downgrade or same price'
+            'message' => 'Invalid current price',
+            'debug_info' => [
+                'current_cycle_price' => $current_cycle_price,
+                'current_config_source' => $current_config['source'] ?? 'unknown'
+            ]
         ];
     }
-    
+
+    // CÁLCULO PRECISO DE PRORRATEO - CON VALIDACIONES
+    $price_diff = round($new_cycle_price - $current_cycle_price, 2);
+
+    nextcloud_banda_log_debug("ANÁLISIS DE DIFERENCIA DE PRECIO", [
+        'precio_nuevo' => $new_cycle_price,
+        'precio_actual' => $current_cycle_price,
+        'diferencia' => $price_diff
+    ]);
+
+    // Si no hay diferencia de precio o es downgrade significativo, manejar adecuadamente
+    if ($price_diff <= 0) {
+        nextcloud_banda_log_debug("SIN DIFERENCIA O DOWNGRADE", [
+            'price_diff' => $price_diff,
+            'current_price' => $current_cycle_price,
+            'new_price' => $new_cycle_price,
+            'mensaje' => $price_diff <= 0 ? 'Downgrade o mismo precio' : 'Upgrade positivo'
+        ]);
+        
+        // Para downgrades, podemos devolver 0 o manejar según política de negocio
+        return [
+            'prorated_amount' => 0,
+            'days_remaining' => $days_remaining ?? 0,
+            'total_days' => $total_days ?? 1,
+            'next_payment_date' => '',
+            'message' => 'Downgrade or same price',
+            'current_price' => round($current_cycle_price, 2),
+            'new_price' => round($new_cycle_price, 2),
+            'price_diff' => $price_diff,
+            'current_frequency' => $current_frequency,
+            'new_frequency' => $new_frequency
+        ];
+    }
+
     // Obtener información del ciclo de pago
     $payment_info = nextcloud_banda_get_next_payment_info($user_id);
-    
     if (!$payment_info || empty($payment_info['next_payment_date'])) {
         nextcloud_banda_log_error("No se pudo obtener next_payment_date");
         return [
@@ -1356,54 +1654,118 @@ function nextcloud_banda_calculate_proration_core_aligned($user_id, $new_level_i
             'message' => 'Could not determine next payment date'
         ];
     }
-    
-    $next_payment_timestamp = $payment_info['next_payment_date'];
-    $cycle_start_timestamp = $payment_info['cycle_start'];
-    $cycle_end_timestamp = $payment_info['cycle_end'];
-    
+
+    // Calcular días restantes y totales
+    $cycle_start_ts = (int)$payment_info['cycle_start'];
+    $cycle_end_ts = (int)$payment_info['cycle_end'];
     $now = current_time('timestamp');
-    
-    // Calcular días
-    $total_days = max(1, round(($cycle_end_timestamp - $cycle_start_timestamp) / DAY_IN_SECONDS));
-    $days_remaining = max(0, round(($cycle_end_timestamp - $now) / DAY_IN_SECONDS));
-    
-    // Defensa: si estamos dentro del ciclo pero days_remaining es 0, forzar a 1
-    if ($now >= $cycle_start_timestamp && $now < $cycle_end_timestamp && $days_remaining == 0) {
+
+    $total_seconds = max(1, $cycle_end_ts - $cycle_start_ts);
+    $remaining_seconds = max(0, $cycle_end_ts - $now);
+    $fraction_remaining = $total_seconds > 0 ? $remaining_seconds / $total_seconds : 0;
+
+    $total_days = max(1, (int)round($total_seconds / DAY_IN_SECONDS));
+    $days_remaining = max(0, (int)floor($remaining_seconds / DAY_IN_SECONDS));
+    if ($remaining_seconds > 0 && $days_remaining === 0) {
         $days_remaining = 1;
     }
-    
-    nextcloud_banda_log_debug("Cycle info", [
-        'cycle_start' => date('Y-m-d H:i:s', $cycle_start_timestamp),
-        'cycle_end' => date('Y-m-d H:i:s', $cycle_end_timestamp),
-        'now' => date('Y-m-d H:i:s', $now),
-        'total_days' => $total_days,
-        'days_remaining' => $days_remaining
+
+    // CÁLCULO MATEMÁTICO PRECISO DE PRORRATEO
+    // Basado en tu ejemplo: R$ 1.055,00 - (R$ 1.055,00 × 180/182) = Crédito
+    // Nuevo precio: R$ 2.862,00 - Crédito = Monto a pagar
+
+    $daily_rate = $current_cycle_price / $total_days;
+    $current_credit_precise = $daily_rate * $days_remaining;
+    $prorated_amount_precise = $new_cycle_price - $current_credit_precise;
+
+    // Redondeo cuidadoso para evitar errores de centavos
+    $current_credit = round($current_credit_precise, 2);
+    $prorated_amount = round($prorated_amount_precise, 2);
+
+    // Asegurar que no sea negativo
+    $prorated_amount = max(0, $prorated_amount);
+
+    // Cálculo adicional para mostrar detalles
+    $prorated_new = round($new_cycle_price * $fraction_remaining, 2);
+
+    nextcloud_banda_log_debug("CÁLCULO PRORRATEO DETALLADO", [
+        'metodo' => 'Precio nuevo - (Precio actual × fracción restante)',
+        'precio_nuevo' => $new_cycle_price,
+        'precio_actual' => $current_cycle_price,
+        'fraccion_restante' => $fraction_remaining,
+        'dias_restantes' => $days_remaining,
+        'dias_totales' => $total_days,
+        'tasa_diaria' => $daily_rate,
+        'credito_actual_preciso' => $current_credit_precise,
+        'credito_actual_redondeado' => $current_credit,
+        'monto_prorrateado_preciso' => $prorated_amount_precise,
+        'monto_prorrateado_final' => $prorated_amount
     ]);
-    
-    // Calcular prorrateo
-    $price_diff = $new_price - $current_price;
-    $prorated_amount = 0;
-    
+
+    // Asegurar consistencia en los cálculos
     if ($days_remaining > 0 && $total_days > 0) {
-        $prorated_amount = round(($price_diff * $days_remaining) / $total_days, 2);
+        $fraction_check = $days_remaining / $total_days;
+        nextcloud_banda_log_debug("VERIFICACIÓN DE FRACCIÓN", [
+            'calculada' => $fraction_remaining,
+            'verificada' => $fraction_check,
+            'diferencia' => abs($fraction_remaining - $fraction_check)
+        ]);
     }
-    
-    nextcloud_banda_log_debug("Proration result", [
-        'price_diff' => $price_diff,
-        'prorated_amount' => $prorated_amount
+
+    // Asegurar que el crédito no exceda el precio actual
+    $current_credit = min($current_credit, $current_cycle_price);
+    $prorated_amount = max(0, $new_cycle_price - $current_credit);
+
+    nextcloud_banda_log_debug("VALORES FINALES AJUSTADOS", [
+        'credito_final' => $current_credit,
+        'monto_a_pagar' => $prorated_amount,
+        'verificacion' => $new_cycle_price - $current_credit
     ]);
-    
-    nextcloud_banda_log_debug("=== PRORATION CORE-ALIGNED END ===");
-    
-    return [
+
+    // Generar etiquetas para las frecuencias
+    $frequency_labels = [
+        'monthly' => 'Mensal',
+        'semiannual' => 'Semestral',
+        'annual' => 'Anual',
+        'biennial' => 'Bienal',
+        'triennial' => 'Trienal',
+        'quadrennial' => 'Quadrienal',
+        'quinquennial' => 'Quinquenal'
+    ];
+
+    $current_cycle_label = $frequency_labels[$current_frequency] ?? ucfirst($current_frequency);
+    $new_cycle_label = $frequency_labels[$new_frequency] ?? ucfirst($new_frequency);
+
+    $result = [
         'prorated_amount' => $prorated_amount,
+        'prorated_new_amount' => $prorated_new,
+        'current_prorated_amount' => $current_credit,
+        'price_diff' => $price_diff,
+        'fraction_remaining' => $fraction_remaining,
+        'remaining_seconds' => $remaining_seconds,
+        'total_seconds' => $total_seconds,
         'days_remaining' => $days_remaining,
         'total_days' => $total_days,
-        'next_payment_date' => date('Y-m-d', $next_payment_timestamp),
-        'current_price' => $current_price,
-        'new_price' => $new_price,
-        'message' => 'Success'
+        'next_payment_date' => date('Y-m-d', (int)$payment_info['next_payment_date']),
+        'current_price' => round($current_cycle_price, 2),
+        'new_price' => round($new_cycle_price, 2),
+        'current_frequency' => $current_frequency,
+        'current_cycle_label' => $current_cycle_label,
+        'new_frequency' => $new_frequency,
+        'new_cycle_label' => $new_cycle_label,
+        'message' => 'Success',
+        'debug_info' => [
+            'calculation_method' => 'new_price - (current_price * fraction_remaining)',
+            'daily_rate' => round($daily_rate, 4),
+            'credit_calculation' => "{$current_cycle_price} × {$fraction_remaining} = {$current_credit}",
+            'final_calculation' => "{$new_cycle_price} - {$current_credit} = {$prorated_amount}",
+            'days_ratio' => "{$days_remaining}/{$total_days}"
+        ]
     ];
+
+    nextcloud_banda_log_debug("RESULTADO FINAL DE PRORRATEO", $result);
+
+    return $result;
 }
 
 /**
@@ -1417,8 +1779,8 @@ function nextcloud_banda_is_plan_upgrade($user_id, $new_storage, $new_users, $ne
     if (!empty($user_levels)) {
         foreach ($user_levels as $level) {
             if (in_array((int)$level->id, $allowed_levels, true)) {
-                $cycle_info = nextcloud_banda_get_next_payment_info($user_id, $level);
-                if ($cycle_info && $cycle_info['days_remaining'] > 0) {
+                $cycle_info = nextcloud_banda_get_next_payment_info($user_id);
+                if ($cycle_info && isset($cycle_info['cycle_end']) && $cycle_info['cycle_end'] > time()) {
                     $current_banda_level = $level;
                     break;
                 }
@@ -1470,8 +1832,8 @@ function nextcloud_banda_get_detailed_subscription_info($user_id) {
     if (!empty($user_levels)) {
         foreach ($user_levels as $level) {
             if (in_array((int)$level->id, $allowed_levels, true)) {
-                $cycle_info = nextcloud_banda_get_next_payment_info($user_id, $level);
-                if ($cycle_info && $cycle_info['days_remaining'] > 0) {
+                $cycle_info = nextcloud_banda_get_next_payment_info($user_id);
+                if ($cycle_info && isset($cycle_info['cycle_end']) && $cycle_info['cycle_end'] > time()) {
                     $current_banda_level = $level;
                     break;
                 }
@@ -1486,158 +1848,158 @@ function nextcloud_banda_get_detailed_subscription_info($user_id) {
     $current_config = nextcloud_banda_get_user_real_config_improved($user_id, $current_banda_level);
     $current_amount = $current_config['final_amount'] ?: (float)$current_banda_level->initial_payment;
 
-    $cycle_info = nextcloud_banda_get_next_payment_info($user_id, $current_banda_level);
+    $cycle_info = nextcloud_banda_get_next_payment_info($user_id);
     if (!$cycle_info) {
         return false;
     }
 
     return [
         'current_amount' => $current_amount,
-        'days_remaining' => $cycle_info['days_remaining'],
-        'total_days' => $cycle_info['total_days'],
-        'start_date' => date('Y-m-d H:i:s', $cycle_info['cycle_start_ts']),
-        'end_date' => date('Y-m-d H:i:s', $cycle_info['cycle_end_ts']),
-        'next_payment_date' => date('Y-m-d H:i:s', $cycle_info['next_payment_ts']),
+        'days_remaining' => isset($cycle_info['days_remaining']) ? $cycle_info['days_remaining'] : 0,
+        'total_days' => isset($cycle_info['total_days']) ? $cycle_info['total_days'] : 1,
+        'start_date' => date('Y-m-d H:i:s', isset($cycle_info['cycle_start']) ? $cycle_info['cycle_start'] : time()),
+        'end_date' => date('Y-m-d H:i:s', isset($cycle_info['cycle_end']) ? $cycle_info['cycle_end'] : time()),
+        'next_payment_date' => date('Y-m-d H:i:s', isset($cycle_info['next_payment_date']) ? $cycle_info['next_payment_date'] : time()),
         'current_config' => $current_config,
-        'source' => $cycle_info['source']
+        'source' => 'next_payment_info'
     ];
 }
 
 /**
- * AJAX handler para cálculo de prorrateo en tiempo real
+ * AJAX handler para cálculo de prorrateo en tiempo real - CORREGIDO
  */
 function nextcloud_banda_ajax_calculate_proration() {
-    nextcloud_banda_log_debug("=== AJAX CALCULATE PRORATION START ===");
-    
-    if (!check_ajax_referer('nextcloud_banda_nonce', 'nonce', false)) {
-        nextcloud_banda_log_error("Nonce inválido");
-        wp_send_json_error(['message' => 'Invalid nonce']);
+    // Verificar autenticación
+    if (!is_user_logged_in()) {
+        wp_send_json_error([
+            'message' => __('Usuário não autenticado.', 'nextcloud-banda'),
+        ], 401);
         return;
     }
-    
-    $user_id = get_current_user_id();
-    if (!$user_id) {
-        nextcloud_banda_log_error("Usuario no autenticado");
-        wp_send_json_error(['message' => 'User not authenticated']);
+
+    // Verificar nonce
+    if (!check_ajax_referer('nextcloud_banda_proration', 'security', false)) {
+        wp_send_json_error([
+            'message' => __('Nonce inválido.', 'nextcloud-banda'),
+        ], 403);
         return;
     }
-    
-    // Obtener parámetros
-    $storage_space = isset($_POST['storage_space']) ? sanitize_text_field($_POST['storage_space']) : '1tb';
-    $num_users = isset($_POST['num_users']) ? intval($_POST['num_users']) : 2;
-    $payment_frequency = isset($_POST['payment_frequency']) ? sanitize_text_field($_POST['payment_frequency']) : 'monthly';
-    
-    nextcloud_banda_log_debug("AJAX Params", [
-        'user_id' => $user_id,
-        'storage_space' => $storage_space,
-        'num_users' => $num_users,
-        'payment_frequency' => $payment_frequency
+
+    // Obtener y sanitizar parámetros
+    $level_id = isset($_POST['level_id']) ? (int) $_POST['level_id'] : 0;
+    $storage_space_raw = isset($_POST['storage']) ? sanitize_text_field($_POST['storage']) : '';
+    $num_users = isset($_POST['users']) ? (int) $_POST['users'] : 0;
+    $payment_frequency = isset($_POST['frequency']) ? strtolower(sanitize_text_field($_POST['frequency'])) : 'monthly';
+
+    // Validar parámetros requeridos
+    if ($level_id <= 0) {
+        wp_send_json_error([
+            'message' => __('ID do nível inválido.', 'nextcloud-banda'),
+        ], 400);
+        return;
+    }
+
+    // Logging para debugging
+    nextcloud_banda_log_debug('AJAX proration request received', [
+        'level_id' => $level_id,
+        'storage' => $storage_space_raw,
+        'users' => $num_users,
+        'frequency' => $payment_frequency,
+        'user_id' => get_current_user_id()
     ]);
-    
-    // Obtener nivel actual
-    $current_level = pmpro_getMembershipLevelForUser($user_id);
-    if (!$current_level) {
-        nextcloud_banda_log_debug("No active membership");
-        wp_send_json_success([
-            'is_upgrade' => false,
-            'message' => 'No active membership'
-        ]);
-        return;
-    }
-    $level_id = (int) $current_level->id;
 
-    // Obtener ciclo real del level
-    $cycle_number = (int) ($current_level->cycle_number ?? 1);
-    $cycle_period = (string) ($current_level->cycle_period ?? 'Month');
-    $cycle_label  = nextcloud_banda_map_cycle_label($cycle_number, $cycle_period);
-    $current_frequency_derived = nextcloud_banda_derive_frequency_from_cycle($cycle_number, $cycle_period);
-
-    // Normalizar storage
-    $storage_tb = (int) str_replace('tb', '', strtolower($storage_space));
-    if ($storage_tb <= 0) {
-        $storage_tb = 1;
-    }
-
-    // Config y multiplicadores
+    // Obtener configuración y validar frecuencia
     $config = nextcloud_banda_get_config();
-    $frequency_multipliers = isset($config['frequency_multipliers']) && is_array($config['frequency_multipliers'])
-        ? $config['frequency_multipliers']
-        : ['monthly' => 1.0, 'quarterly' => 3.0, 'semiannual' => 6.0, 'annual' => 12.0];
-
-    // Validar frecuencia pedida
-    if (!array_key_exists($payment_frequency, $frequency_multipliers)) {
-        nextcloud_banda_log_debug("Frecuencia no válida recibida. Forzando monthly.", ['payment_frequency' => $payment_frequency]);
+    $multipliers = $config['frequency_multipliers'] ?? ['monthly' => 1.0];
+    
+    if (!isset($multipliers[$payment_frequency])) {
         $payment_frequency = 'monthly';
     }
 
-    // Calcular nuevo precio con frecuencia
-    $base_price = nextcloud_banda_calculate_price($level_id, $storage_tb, $num_users); // precio base "mensual"
-    $multiplier = $frequency_multipliers[$payment_frequency] ?? 1.0;
-    $new_total_price = (int) ceil($base_price * $multiplier);
-
-    // Obtener config actual para calcular current_amount "por ciclo" con frecuencia vigente
-    $current_config = nextcloud_banda_get_user_config($user_id); // storage numérico, users, frequency
-    $current_storage_tb = (int) ($current_config['storage'] ?? 1);
-    if ($current_storage_tb <= 0) { $current_storage_tb = 1; }
-
-    $current_users = (int) ($current_config['users'] ?? 2);
-    if ($current_users <= 0) { $current_users = 1; }
-
-    $current_frequency = $current_config['frequency'] ?? 'monthly';
-    if (!array_key_exists($current_frequency, $frequency_multipliers)) {
-        $current_frequency = 'monthly';
+    // Normalizar parámetros
+    $storage_space = !empty($storage_space_raw) ? strtolower($storage_space_raw) : '1tb';
+    if ($num_users < 1) {
+        $num_users = 2;
     }
 
-    // Precio base (sin multiplicador de frecuencia) para la config actual (mensual)
-    $current_base_price = nextcloud_banda_calculate_price($level_id, $current_storage_tb, $current_users);
-    // Aplicar multiplicador de frecuencia actual
-    $current_multiplier = $frequency_multipliers[$current_frequency] ?? 1.0;
-    $current_amount = (int) ceil($current_base_price * $current_multiplier);
+    // Obtener precio base
+    $level = pmpro_getLevel($level_id);
+    $base_price = $level && isset($level->initial_payment)
+        ? (float) $level->initial_payment
+        : NEXTCLOUD_BANDA_BASE_PRICE;
 
-    nextcloud_banda_log_debug("New price calculated", [
+    // Calcular nuevo precio total
+    $new_total_price = (float) nextcloud_banda_calculate_pricing(
+        $storage_space,
+        $num_users,
+        $payment_frequency,
+        $base_price
+    );
+
+    // Obtener precio actual
+    $current_membership = pmpro_getMembershipLevelForUser(get_current_user_id());
+    $current_base_price = !empty($current_membership) && isset($current_membership->initial_payment)
+        ? (float) $current_membership->initial_payment
+        : 0.0;
+
+    nextcloud_banda_log_debug('--- AJAX PRORATION INPUT ---', [
+        'user_id' => get_current_user_id(),
+        'level_id' => $level_id,
+        'storage' => $storage_space,
+        'users' => $num_users,
+        'frequency' => $payment_frequency,
         'base_price' => $base_price,
-        'multiplier' => $multiplier,
-        'new_total_price' => $new_total_price
-    ]);
-    nextcloud_banda_log_debug("Current amount (cycle with frequency)", [
+        'new_total_price' => $new_total_price,
         'current_base_price' => $current_base_price,
-        'current_multiplier' => $current_multiplier,
-        'current_amount' => $current_amount,
-        'current_frequency' => $current_frequency
     ]);
-    
-    // Calcular prorrateo (elige el formato correcto para storage)
-    // Opción 1: si la función espera TB numérico:
-    $proration = nextcloud_banda_calculate_proration_core_aligned($user_id, $level_id, $storage_tb, $num_users);
-    // Opción 2 (elimina la opción 1) si espera string tipo "1tb":
-    // $proration = nextcloud_banda_calculate_proration_core_aligned($user_id, $level_id, $storage_space, $num_users);
 
-    // Asegurar claves para evitar notices
-    $prorated_amount  = isset($proration['prorated_amount']) ? (float) $proration['prorated_amount'] : 0.0;
-    $days_remaining   = isset($proration['days_remaining']) ? (int) $proration['days_remaining'] : 0;
-    $total_days       = isset($proration['total_days']) ? (int) $proration['total_days'] : 0;
-    $next_payment_date = $proration['next_payment_date'] ?? null;
+    // Calcular prorrateo
+    $proration = nextcloud_banda_calculate_proration_core_aligned(
+        get_current_user_id(),
+        $level_id,
+        $storage_space,
+        $num_users,
+        $payment_frequency
+    );
 
+    // Verificar que el proration tenga datos válidos
+    if (!$proration || !is_array($proration)) {
+        nextcloud_banda_log_error('Proration calculation failed or returned invalid data', [
+            'user_id' => get_current_user_id(),
+            'proration_result' => $proration
+        ]);
+        
+        wp_send_json_error([
+            'message' => __('Falha no cálculo de prorrateo.', 'nextcloud-banda'),
+        ], 500);
+        return;
+    }
+
+    nextcloud_banda_log_debug('--- AJAX PRORATION RESULT ---', $proration);
+
+    // Construir respuesta consistente
     $response = [
-        'is_upgrade'        => ($prorated_amount > 0),
-        'new_total_price'   => $new_total_price,
-        'prorated_amount'   => $prorated_amount,
-        'days_remaining'    => $days_remaining,
-        'total_days'        => $total_days,
-        'next_payment_date' => $next_payment_date,
-        'current_price'     => isset($proration['current_price']) ? (float) $proration['current_price'] : (float) $current_base_price,
-        'new_price'         => isset($proration['new_price']) ? (float) $proration['new_price'] : (float) $base_price,
-        'current_amount'    => $current_amount,
-        // NUEVO: exponer ciclo real
-        'cycle_number'      => $cycle_number,
-        'cycle_period'      => $cycle_period,
-        'cycle_label'       => $cycle_label,
-        'current_frequency' => $current_frequency_derived, // para que JS sepa la frecuencia canónica
+        'is_upgrade' => isset($proration['prorated_amount']) && (float)$proration['prorated_amount'] > 0,
+        'new_total_price' => round($new_total_price, 2),
+        'prorated_amount' => isset($proration['prorated_amount']) ? round((float)$proration['prorated_amount'], 2) : 0,
+        'days_remaining' => isset($proration['days_remaining']) ? (int)$proration['days_remaining'] : 0,
+        'total_days' => isset($proration['total_days']) ? (int)$proration['total_days'] : 1,
+        'next_payment_date' => isset($proration['next_payment_date']) ? $proration['next_payment_date'] : '',
+        'current_price' => isset($proration['current_price']) ? round((float)$proration['current_price'], 2) : round($current_base_price, 2),
+        'new_price' => round($new_total_price, 2),
+        'current_prorated_amount' => isset($proration['current_prorated_amount']) ? round((float)$proration['current_prorated_amount'], 2) : 0,
+        'new_prorated_amount' => isset($proration['prorated_new_amount']) ? round((float)$proration['prorated_new_amount'], 2) : 0,
+        'fraction_remaining' => isset($proration['fraction_remaining']) ? (float)$proration['fraction_remaining'] : 0,
+        'current_frequency' => isset($proration['current_frequency']) ? $proration['current_frequency'] : $payment_frequency,
+        'new_frequency' => isset($proration['new_frequency']) ? $proration['new_frequency'] : $payment_frequency,
+        'current_cycle_label' => isset($proration['current_cycle_label']) ? $proration['current_cycle_label'] : '',
+        'new_cycle_label' => isset($proration['new_cycle_label']) ? $proration['new_cycle_label'] : '',
+        'message' => isset($proration['message']) ? $proration['message'] : 'Success',
+        'success' => true
     ];
 
-    nextcloud_banda_log_debug("Sending response", $response);
-    nextcloud_banda_log_debug("=== AJAX CALCULATE PRORATION END ===");
-    
+    nextcloud_banda_log_debug('--- AJAX PRORATION RESPONSE ---', $response);
+
     wp_send_json_success($response);
 }
 
@@ -1729,43 +2091,100 @@ function nextcloud_banda_save_configuration($user_id, $morder) {
 
 /**
  * Mapea cycle_number y cycle_period de PMPro a etiqueta legible en portugués
+ * CORREGIDO: Manejo de plurales y casos especiales
  */
 function nextcloud_banda_map_cycle_label($cycle_number, $cycle_period) {
     $period = strtolower((string)$cycle_period);
     $num = (int)$cycle_number;
     
-    if ($period === 'month' || $period === 'months') {
+    // Normalizar períodos
+    if (strpos($period, 'month') !== false) {
+        $period = 'month';
+    } elseif (strpos($period, 'year') !== false) {
+        $period = 'year';
+    } elseif (strpos($period, 'week') !== false) {
+        $period = 'week';
+    } elseif (strpos($period, 'day') !== false) {
+        $period = 'day';
+    }
+    
+    if ($period === 'month') {
         switch ($num) {
             case 1:  return 'Mensal';
+            case 2:  return 'Bimestral';
+            case 3:  return 'Trimestral';
+            case 4:  return 'Quadrimensal';
+            case 5:  return 'Quinquemestral';
             case 6:  return 'Semestral';
+            case 7:  return 'Setembral';
+            case 8:  return 'Octomestral';
+            case 9:  return 'Nonomestral';
+            case 10: return 'Decamensual';
+            case 11: return 'Undecamensual';
             case 12: return 'Anual';
+            case 18: return 'Anual e meio';
             case 24: return 'Bienal';
+            case 30: return 'Biênio e meio';
             case 36: return 'Trienal';
             case 48: return 'Quadrienal';
             case 60: return 'Quinquenal';
-            default: return "{$num} meses";
+            default: 
+                if ($num > 1) {
+                    return "{$num} meses";
+                } else {
+                    return "Mensal";
+                }
         }
     }
-    if ($period === 'year' || $period === 'years') {
-        return ($num === 1) ? 'Anual' : "{$num} anos";
+    
+    if ($period === 'year') {
+        if ($num === 1) {
+            return 'Anual';
+        } else {
+            return "{$num} anos";
+        }
     }
-    if ($period === 'week' || $period === 'weeks') {
-        return ($num === 1) ? 'Semanal' : "{$num} semanas";
+    
+    if ($period === 'week') {
+        if ($num === 1) {
+            return 'Semanal';
+        } else {
+            return "{$num} semanas";
+        }
     }
-    if ($period === 'day' || $period === 'days') {
-        return ($num === 1) ? 'Diário' : "{$num} dias";
+    
+    if ($period === 'day') {
+        if ($num === 1) {
+            return 'Diário';
+        } else {
+            return "{$num} dias";
+        }
     }
-    return "{$num} {$period}";
+    
+    // Fallback genérico
+    return ucfirst($cycle_period) . " (" . $cycle_number . ")";
 }
 
 /**
  * Deriva payment_frequency canónico desde cycle_number/cycle_period
+ * CORREGIDO: Manejo más preciso de conversiones
  */
 function nextcloud_banda_derive_frequency_from_cycle($cycle_number, $cycle_period) {
     $period = strtolower((string)$cycle_period);
     $num = (int)$cycle_number;
     
-    if ($period === 'month' || $period === 'months') {
+    // Normalizar períodos
+    if (strpos($period, 'month') !== false) {
+        $period = 'month';
+    } elseif (strpos($period, 'year') !== false) {
+        $period = 'year';
+    } elseif (strpos($period, 'week') !== false) {
+        $period = 'week';
+    } elseif (strpos($period, 'day') !== false) {
+        $period = 'day';
+    }
+    
+    if ($period === 'month') {
         switch ($num) {
             case 1:  return 'monthly';
             case 6:  return 'semiannual';
@@ -1774,12 +2193,55 @@ function nextcloud_banda_derive_frequency_from_cycle($cycle_number, $cycle_perio
             case 36: return 'triennial';
             case 48: return 'quadrennial';
             case 60: return 'quinquennial';
-            default: return 'monthly'; // fallback
+            default: return 'monthly'; // fallback para otros meses
         }
     }
-    if ($period === 'year' || $period === 'years') {
-        return ($num === 1) ? 'annual' : 'annual';
+    
+    if ($period === 'year') {
+        switch ($num) {
+            case 1: return 'annual';
+            case 2: return 'biennial';
+            case 3: return 'triennial';
+            case 4: return 'quadrennial';
+            case 5: return 'quinquennial';
+            default: return 'annual'; // fallback para años
+        }
     }
+    
+    if ($period === 'week') {
+        if ($num === 1) {
+            return 'weekly';
+        } elseif ($num === 2) {
+            return 'biweekly';
+        } else {
+            // Convertir semanas a meses aproximadamente
+            $months = round($num / 4.33); // 4.33 semanas por mes promedio
+            switch ($months) {
+                case 1: return 'monthly';
+                case 3: return 'quarterly';
+                case 6: return 'semiannual';
+                case 12: return 'annual';
+                default: return 'monthly';
+            }
+        }
+    }
+    
+    if ($period === 'day') {
+        if ($num === 1) {
+            return 'daily';
+        } else {
+            // Convertir días a meses aproximadamente
+            $months = round($num / 30); // 30 días por mes aproximado
+            switch ($months) {
+                case 1: return 'monthly';
+                case 3: return 'quarterly';
+                case 6: return 'semiannual';
+                case 12: return 'annual';
+                default: return 'monthly';
+            }
+        }
+    }
+    
     return 'monthly'; // fallback genérico
 }
 
@@ -1858,18 +2320,23 @@ function nextcloud_banda_show_member_config_improved() {
         $display_storage = $real_config['storage_space'] ?: '1tb';
         $display_users = $real_config['num_users'] ?: $base_users_included;
 
-        // Derivar frecuencia desde el ciclo real del level (fuente de verdad)
+        // CORREGIDO: Derivar frecuencia desde el ciclo real del level (fuente de verdad)
+        // y asegurar consistencia con la etiqueta mostrada
         $cycle_number = (int)($membership->cycle_number ?? 1);
         $cycle_period = (string)($membership->cycle_period ?? 'Month');
-        $display_frequency_derived = nextcloud_banda_derive_frequency_from_cycle($cycle_number, $cycle_period);
+        
+        // Derivar la frecuencia canónica desde el ciclo
+        $derived_frequency = nextcloud_banda_derive_frequency_from_cycle($cycle_number, $cycle_period);
+        
+        // Generar la etiqueta legible desde el ciclo real (esto es lo que se debe mostrar)
         $cycle_label = nextcloud_banda_map_cycle_label($cycle_number, $cycle_period);
 
-        // Usar la derivada del ciclo real, no la guardada (que puede estar desactualizada)
-        $display_frequency = $display_frequency_derived;
+        // Usar el ciclo real como fuente de verdad, no la frecuencia guardada
+        $display_frequency = $derived_frequency;
 
         $display_amount = $real_config['final_amount'] ?: (float)$membership->initial_payment;
         
-        $additional_users = max(0, $display_users - $base_users_included);
+        $additional_users = max(0, (int)$display_users - $base_users_included);
         $is_estimated = ($real_config['source'] === 'none' || $real_config['source'] === 'membership_deduction');
 
         ?>
@@ -1902,7 +2369,7 @@ function nextcloud_banda_show_member_config_improved() {
 
                 <div style="margin-bottom: 15px;">
                     <p><strong>👥 Usuários:</strong> 
-                        <?php echo esc_html($user_options[$display_users] ?? "{$display_users} usuários"); ?>
+                        <?php echo esc_html($user_options[strval($display_users)] ?? "{$display_users} usuários"); ?>
                         <?php if ($is_estimated && $real_config['source'] === 'none'): ?>
                             <em style="color: #666; font-size: 0.85em;">(estimado)</em>
                         <?php endif; ?>
@@ -1988,7 +2455,11 @@ function nextcloud_banda_show_member_config_improved() {
 
         nextcloud_banda_log_info("Banda member config displayed successfully for user {$user_id}", [
             'source' => $real_config['source'],
-            'is_estimated' => $is_estimated
+            'is_estimated' => $is_estimated,
+            'cycle_label' => $cycle_label,
+            'derived_frequency' => $derived_frequency,
+            'cycle_number' => $cycle_number,
+            'cycle_period' => $cycle_period
         ]);
 
     } catch (Exception $e) {
@@ -2109,8 +2580,8 @@ function nextcloud_banda_get_user_real_config_improved($user_id, $membership = n
         foreach ($user_levels as $level) {
             if (in_array((int)$level->id, $allowed_levels, true)) {
                 // Verificar usando next_payment_info
-                $cycle_info = nextcloud_banda_get_next_payment_info($user_id, $level);
-                if ($cycle_info && $cycle_info['days_remaining'] > 0) {
+                $cycle_info = nextcloud_banda_get_next_payment_info($user_id);
+                if ($cycle_info && isset($cycle_info['cycle_end']) && $cycle_info['cycle_end'] > time()) {
                     $has_active_banda_membership = true;
                     $active_level = $level;
                     break;
@@ -2182,8 +2653,8 @@ function nextcloud_banda_cleanup_inactive_users() {
             foreach ($user_levels as $level) {
                 if (in_array((int)$level->id, $allowed_levels, true)) {
                     // Verificar usando next_payment_info
-                    $cycle_info = nextcloud_banda_get_next_payment_info($user_id, $level);
-                    if ($cycle_info && $cycle_info['days_remaining'] > 0) {
+                    $cycle_info = nextcloud_banda_get_next_payment_info($user_id);
+                    if ($cycle_info && isset($cycle_info['cycle_end']) && $cycle_info['cycle_end'] > time()) {
                         $has_active_banda_membership = true;
                         break;
                     }
@@ -2228,8 +2699,25 @@ function nextcloud_banda_cleanup_inactive_endpoint() {
 // Hook de inicialización único
 add_action('init', 'nextcloud_banda_add_dynamic_fields', 20);
 
+// Hook para validar antes del checkout
+add_filter('pmpro_registration_checks', 'nextcloud_banda_validate_before_checkout');
+function nextcloud_banda_validate_before_checkout($pmpro_continue_registration) {
+    if (!$pmpro_continue_registration) {
+        return $pmpro_continue_registration;
+    }
+    
+    $validation = nextcloud_banda_validate_checkout_config();
+    
+    if (is_wp_error($validation)) {
+        pmpro_setMessage($validation->get_error_message(), 'pmpro_error');
+        return false;
+    }
+    
+    return true;
+}
+
 // Hook principal de modificación de precio
-add_filter('pmpro_checkout_level', 'nextcloud_banda_modify_level_pricing', 1);
+add_filter('pmpro_checkout_level', 'nextcloud_banda_modify_level_pricing', 10, 2);
 
 // Mantiene el startdate original si el usuario permanece en el mismo level
 add_filter('pmpro_checkout_start_date', function($startdate, $user_id, $level) {
